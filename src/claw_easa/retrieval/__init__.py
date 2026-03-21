@@ -1,22 +1,8 @@
-"""Retrieval layer for clawEASA."""
+"""Retrieval layer for clawEASA.
 
-from .pipeline import build_index, vector_lookup
-from .query_profile import build_query_profile
-from .rewrite import rewrite_query
-from .router import normalize_query, route_query
-from .service import hybrid, lookup, refs, snippets
-from .survey import shape_survey_results
+Keep package import lightweight: do not eagerly import FAISS/vector/indexing modules
+from here, because simple CLI commands (lookup/refs/router) should not load heavy
+optional dependencies at import time.
+"""
 
-__all__ = [
-    "build_index",
-    "build_query_profile",
-    "vector_lookup",
-    "hybrid",
-    "lookup",
-    "normalize_query",
-    "rewrite_query",
-    "refs",
-    "route_query",
-    "shape_survey_results",
-    "snippets",
-]
+__all__: list[str] = []

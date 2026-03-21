@@ -5,7 +5,6 @@ import re
 
 from claw_easa.db.sqlite import Database
 from claw_easa.retrieval.exact import lookup_reference, search_references
-from claw_easa.retrieval.vector import vector_search
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +38,8 @@ def hybrid_search(
     fts_results = search_references(db, query, limit=top_k)
 
     try:
+        from claw_easa.retrieval.vector import vector_search
+
         vec_results = vector_search(db, query, top_k=top_k)
     except FileNotFoundError:
         log.warning("FAISS index not found — falling back to FTS only")

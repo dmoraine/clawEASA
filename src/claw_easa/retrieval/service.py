@@ -5,7 +5,6 @@ import logging
 from claw_easa.db import Database
 from claw_easa.db.migrations import MigrationRunner
 from claw_easa.retrieval.exact import lookup_reference, search_references
-from claw_easa.retrieval.hybrid import hybrid_search
 from claw_easa.retrieval.snippets import search_snippets
 
 log = logging.getLogger(__name__)
@@ -44,6 +43,8 @@ def snippets(query: str, limit: int = 10) -> list[dict]:
 
 
 def hybrid(query: str, top_k: int = 15) -> list[dict]:
+    from claw_easa.retrieval.hybrid import hybrid_search
+
     db = _open_db()
     try:
         return hybrid_search(db, query, top_k=top_k)
