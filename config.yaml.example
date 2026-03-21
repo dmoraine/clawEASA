@@ -1,0 +1,8 @@
+# clawEASA configuration
+# Copy to config.yaml and adjust as needed.
+
+data_dir: data
+db_file: claw_easa.db
+faiss_index_file: claw_easa.faiss
+embedding_model: BAAI/bge-small-en-v1.5
+easa_base_url: https://www.easa.europa.eu

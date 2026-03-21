@@ -1,0 +1,21 @@
+{
+  "name": "claw-easa",
+  "version": "0.2.0",
+  "description": "Query EASA Easy Access Rules with hybrid retrieval (FTS + semantic search)",
+  "entry_point": "claw_easa.cli:main",
+  "author": "OpenClaw",
+  "license": "MIT",
+  "requires_python": ">=3.11",
+  "capabilities": [
+    "regulation_lookup",
+    "full_text_search",
+    "semantic_search",
+    "faq_retrieval"
+  ],
+  "corpus": [
+    "Easy Access Rules for Air Operations",
+    "Easy Access Rules for Aircrew",
+    "Easy Access Rules for Basic Regulation",
+    "Occurrence Reporting Rule Book"
+  ]
+}

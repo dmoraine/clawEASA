@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+.env.local
+*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project
+output/
+data/
+*.db
+*.sqlite
+*.faiss
+logs/
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# EASA artifacts (downloaded/generated)
+*.docx
+*.zip
+!docs/**/*.md
+
+# Local OpenClaw skill install/output helpers
+.skill/
