@@ -89,12 +89,18 @@ This repository is a normal Python project **and** contains an OpenClaw skill pa
 
 - Development source of truth: repository root
 - Installable AgentSkill package: `skill/claw-easa/`
-- Historical root-level skill notes were moved to `docs/legacy-skill-notes.md`
+- Local installation is guarded against symlink/destination paths that resolve back into the source repository
 
 To install locally into OpenClaw:
 
 ```bash
 ./scripts/install-openclaw-skill.sh
+```
+
+Optional test/install override:
+
+```bash
+OPENCLAW_SKILL_DST=/tmp/claw-easa-skill ./scripts/install-openclaw-skill.sh
 ```
 
 Or manually:

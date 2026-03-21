@@ -28,4 +28,16 @@ mkdir -p ~/.openclaw/workspace/skills/claw-easa
 rsync -a --delete skill/claw-easa/ ~/.openclaw/workspace/skills/claw-easa/
 ```
 
+Or use the guarded helper script:
+
+```bash
+./scripts/install-openclaw-skill.sh
+```
+
+For a non-default destination during testing:
+
+```bash
+OPENCLAW_SKILL_DST=/tmp/claw-easa-skill ./scripts/install-openclaw-skill.sh
+```
+
 Do not install via a symlink that points outside the workspace.
