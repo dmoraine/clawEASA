@@ -12,6 +12,8 @@ Preferred commands:
 - `claw-easa hybrid "<query>"` for mixed lexical + semantic retrieval
 - `claw-easa ask "<question>"` for routed natural-language queries
 - `claw-easa status` to verify corpus/index availability
+- `claw-easa ear-discover` to list Easy Access Rules available on the EASA website
+- `claw-easa ear-list` to list built-in known sources
 
 Answering rules:
 - Prefer exact lookup when the user gives a regulation reference.

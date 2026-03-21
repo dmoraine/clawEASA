@@ -19,6 +19,7 @@ while preserving regulatory structure and minimizing hallucinations.
 - **FAISS** (IndexFlatIP, cosine similarity) for semantic vector search
 - **sentence-transformers** (`BAAI/bge-small-en-v1.5`, 384 dims) for embeddings
 - Hybrid retrieval merges exact lookup + FTS + vector search with configurable scoring
+- EASA sources are downloaded as **ZIP archives** containing Office Open XML; extraction is automatic
 
 ## Corpus
 
@@ -40,9 +41,12 @@ pip install -e ".[dev]"
 claw-easa init
 
 # Discover Easy Access Rules available on the EASA website
+claw-easa ear-discover
+
+# List built-in known sources
 claw-easa ear-list
 
-# Ingest a regulation source
+# Ingest a regulation source (downloads ZIP, extracts XML, parses)
 claw-easa ingest fetch air-ops
 claw-easa ingest parse air-ops
 

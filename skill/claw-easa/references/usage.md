@@ -13,11 +13,21 @@ The skill package is the installable unit for OpenClaw. The repository root is t
 ```bash
 # from repository root
 python -m claw_easa.cli status
+python -m claw_easa.cli ear-discover       # list EARs available on EASA website
+python -m claw_easa.cli ear-list           # list built-in known sources
+python -m claw_easa.cli ingest fetch air-ops   # download ZIP archive
+python -m claw_easa.cli ingest parse air-ops   # extract XML + parse
 python -m claw_easa.cli lookup ORO.FTL.110
 python -m claw_easa.cli refs "split duty"
 python -m claw_easa.cli snippets "fatigue management"
 python -m claw_easa.cli ask "What are the operator responsibilities for FTL?"
 ```
+
+## Source format
+
+EASA distributes Easy Access Rules as ZIP archives containing a flat Office Open XML file.
+The ingestion pipeline handles extraction automatically: `ingest fetch` downloads the archive,
+and `ingest parse` extracts the XML before parsing it into the regulatory hierarchy.
 
 ## Installing the skill locally for OpenClaw
 
