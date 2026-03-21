@@ -138,19 +138,22 @@ class EASAOfficeXMLParser:
         re.IGNORECASE,
     )
     ARTICLE_IR_PATTERN = re.compile(
-        r'^([A-Z]+\.[A-Z]+\.\d+[A-Z]?)\s+(.*)',
-        re.IGNORECASE,
+        r'^((?:[A-Z]{2,}\s+)?[A-Z]{2,}(?:\.[A-Z0-9-]+)+(?:\([^)]*\)(?:;\([^)]*\))*)?)\s*(.*)',
     )
     ARTICLE_AMC_PATTERN = re.compile(
-        r'^(AMC\d+\s+[A-Z]+\.[A-Z]+\.\d+[A-Z]?.*)',
+        r'^(AMC\d+\s*.+)',
         re.IGNORECASE,
     )
     ARTICLE_GM_PATTERN = re.compile(
-        r'^(GM\d+\s+[A-Z]+\.[A-Z]+\.\d+[A-Z]?.*)',
+        r'^(GM\d+\s*.+)',
         re.IGNORECASE,
     )
     BASIC_ARTICLE_PATTERN = re.compile(
         r'^Article\s+(\d+[A-Z]*)\s*[–-]?\s*(.*)',
+        re.IGNORECASE,
+    )
+    CHAPTER_PATTERN = re.compile(
+        r'^CHAPTER\s+([IVX]+)\s*[–-]\s*(.*)',
         re.IGNORECASE,
     )
     COVER_GM_PATTERN = re.compile(
@@ -236,11 +239,12 @@ class EASAOfficeXMLParser:
     def _style_level(self, style: str) -> int:
         if style in self.HIERARCHY:
             return self.HIERARCHY[style]
-        match = re.search(r'(\d+)', style)
-        if match:
-            level = int(match.group(1))
-            if 1 <= level <= 7:
-                return level
+        if style.startswith('Heading'):
+            match = re.search(r'(\d+)', style)
+            if match:
+                level = int(match.group(1))
+                if 1 <= level <= 7:
+                    return level
         return 0
 
     # ── Mode detection ──────────────────────────────────────────────────
@@ -492,6 +496,17 @@ class EASAOfficeXMLParser:
             if match:
                 return {'entry_type': 'IR', 'entry_ref': match.group(1), 'title': text}
 
+        # Style/content mismatch: check text prefix regardless of style
+        amc_match = self.ARTICLE_AMC_PATTERN.match(text)
+        if amc_match:
+            return {'entry_type': 'AMC', 'entry_ref': amc_match.group(1), 'title': text}
+        gm_match = self.ARTICLE_GM_PATTERN.match(text)
+        if gm_match:
+            return {'entry_type': 'GM', 'entry_ref': gm_match.group(1), 'title': text}
+        ir_match = self.ARTICLE_IR_PATTERN.match(text)
+        if ir_match:
+            return {'entry_type': 'IR', 'entry_ref': ir_match.group(1), 'title': text}
+
         return {'entry_type': 'INFO', 'entry_ref': text[:50], 'title': text}
 
     def _parse_entry(
@@ -504,11 +519,7 @@ class EASAOfficeXMLParser:
     ) -> ParsedEntry:
         body_lines: list[str] = []
         for idx in range(start_idx + 1, end_idx):
-            para = paragraphs[idx]
-            level = self._style_level(para.style)
-            if level > 0 and level <= 5:
-                break
-            formatted = self._format_paragraph(para)
+            formatted = self._format_paragraph(paragraphs[idx])
             if formatted:
                 body_lines.append(formatted)
 
@@ -526,25 +537,134 @@ class EASAOfficeXMLParser:
     def _parse_article_structured(
         self, paragraphs: list[OfficeXMLParagraph],
     ) -> list[ParsedPart]:
-        entry_indices: list[tuple[int, dict[str, str]]] = []
+        chapter_indices = self._find_chapter_boundaries(paragraphs)
+        if chapter_indices:
+            return self._parse_chaptered_articles(paragraphs, chapter_indices)
+        return self._parse_flat_articles(paragraphs)
+
+    def _find_chapter_boundaries(
+        self, paragraphs: list[OfficeXMLParagraph],
+    ) -> list[tuple[int, str, str]]:
+        """Find CHAPTER headings in the document. Returns [(idx, code, title)]."""
+        chapters: list[tuple[int, str, str]] = []
         for i, para in enumerate(paragraphs):
-            info = self._identify_article_entry(para)
+            if para.style == 'Heading1':
+                match = self.CHAPTER_PATTERN.match(para.text.strip())
+                if match:
+                    chapters.append((i, match.group(1), match.group(2).strip()))
+        return chapters
+
+    ROMAN_SECTION_PATTERN = re.compile(
+        r'^SECTION\s+([IVX]+)\s*[–-]\s*(.*)',
+        re.IGNORECASE,
+    )
+
+    def _find_section_boundaries(
+        self, paragraphs: list[OfficeXMLParagraph], start_idx: int, end_idx: int,
+    ) -> list[tuple[int, str]]:
+        """Find SECTION headings within a chapter range."""
+        sections: list[tuple[int, str]] = []
+        for i in range(start_idx, end_idx):
+            para = paragraphs[i]
+            if para.style == 'Heading2':
+                text = para.text.strip()
+                if (self.SECTION_PATTERN.match(text)
+                        or self.ROMAN_SECTION_PATTERN.match(text)):
+                    sections.append((i, text))
+        return sections
+
+    def _collect_article_entries(
+        self, paragraphs: list[OfficeXMLParagraph], start_idx: int, end_idx: int,
+    ) -> list[ParsedEntry]:
+        """Collect article entries within a paragraph range."""
+        entry_indices: list[tuple[int, dict[str, str]]] = []
+        for i in range(start_idx, end_idx):
+            info = self._identify_article_entry(paragraphs[i])
             if info:
                 entry_indices.append((i, info))
 
         entries: list[ParsedEntry] = []
         for idx, (start, info) in enumerate(entry_indices):
-            end = entry_indices[idx + 1][0] if idx + 1 < len(entry_indices) else len(paragraphs)
+            end = entry_indices[idx + 1][0] if idx + 1 < len(entry_indices) else end_idx
             entries.append(self._parse_entry(paragraphs, info, idx + 1, start, end))
+        return entries
 
+    def _parse_chaptered_articles(
+        self,
+        paragraphs: list[OfficeXMLParagraph],
+        chapter_indices: list[tuple[int, str, str]],
+    ) -> list[ParsedPart]:
+        parts: list[ParsedPart] = []
+        for ch_idx, (ch_start, ch_code, ch_title) in enumerate(chapter_indices):
+            ch_end = (
+                chapter_indices[ch_idx + 1][0]
+                if ch_idx + 1 < len(chapter_indices)
+                else len(paragraphs)
+            )
+
+            section_boundaries = self._find_section_boundaries(paragraphs, ch_start, ch_end)
+            subparts: list[ParsedSubpart] = []
+
+            if section_boundaries:
+                for sec_idx, (sec_start, sec_title) in enumerate(section_boundaries):
+                    sec_end = (
+                        section_boundaries[sec_idx + 1][0]
+                        if sec_idx + 1 < len(section_boundaries)
+                        else ch_end
+                    )
+                    entries = self._collect_article_entries(paragraphs, sec_start, sec_end)
+                    if entries:
+                        section = ParsedSection(
+                            title=sec_title, sort_order=sec_idx + 1, entries=entries,
+                        )
+                        sec_code = re.sub(r'SECTION\s+', 'SEC-', sec_title.split('–')[0].strip())
+                        subparts.append(ParsedSubpart(
+                            code=sec_code.strip(),
+                            title=sec_title,
+                            sort_order=sec_idx + 1,
+                            sections=[section],
+                        ))
+            else:
+                entries = self._collect_article_entries(paragraphs, ch_start, ch_end)
+                if entries:
+                    section = ParsedSection(title=ch_title, sort_order=1, entries=entries)
+                    subparts.append(ParsedSubpart(
+                        code='GENERAL', title=ch_title,
+                        sort_order=1, sections=[section],
+                    ))
+
+            if subparts:
+                parts.append(ParsedPart(
+                    code=f'CH-{ch_code}',
+                    title=f'CHAPTER {ch_code} – {ch_title}',
+                    annex='',
+                    sort_order=ch_idx + 1,
+                    subparts=subparts,
+                ))
+
+        return parts
+
+    def _parse_flat_articles(
+        self, paragraphs: list[OfficeXMLParagraph],
+    ) -> list[ParsedPart]:
+        """Fallback: flat article parsing when no chapters are detected."""
+        entries = self._collect_article_entries(paragraphs, 0, len(paragraphs))
         if not entries:
             return []
-
         section = ParsedSection(title='Articles', sort_order=1, entries=entries)
-        subpart = ParsedSubpart(code='ARTICLES', title='Articles', sort_order=1, sections=[section])
-        return [ParsedPart(code='ARTICLES', title='Articles', annex='', sort_order=1, subparts=[subpart])]
+        subpart = ParsedSubpart(
+            code='ARTICLES', title='Articles', sort_order=1, sections=[section],
+        )
+        return [ParsedPart(
+            code='ARTICLES', title='Articles', annex='', sort_order=1, subparts=[subpart],
+        )]
+
+    _TOC_STYLES = frozenset(('TOC1', 'TOC2', 'TOC3', 'TOC4', 'TOC5'))
 
     def _identify_article_entry(self, para: OfficeXMLParagraph) -> dict[str, str] | None:
+        if para.style in self._TOC_STYLES:
+            return None
+
         info = self._identify_entry(para)
         if info:
             return info

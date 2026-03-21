@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SourceSpec:
+    """Internal representation of a source document for fetching/parsing."""
     slug: str
     source_family: str
     title: str
@@ -13,40 +14,47 @@ class SourceSpec:
     source_url: str | None = None
 
 
-KNOWN_SOURCES: list[SourceSpec] = [
-    SourceSpec(
-        slug="air-ops",
-        source_family="ear",
-        title="Easy Access Rules for Air Operations",
-        page_url="https://www.easa.europa.eu/en/document-library/easy-access-rules/easy-access-rules-air-operations",
+@dataclass(frozen=True)
+class SourceAlias:
+    """Maps a short user-friendly slug to catalog search keywords.
+
+    URLs are resolved dynamically from the EASA catalog.
+    ``fallback_page_url`` is only used for EARs that EASA doesn't list
+    on the main catalog index (e.g. the Basic Regulation).
+    """
+    slug: str
+    match_keywords: tuple[str, ...]
+    source_family: str = "ear"
+    language: str = "en"
+    fallback_page_url: str = ""
+
+
+SLUG_ALIASES: list[SourceAlias] = [
+    SourceAlias("air-ops", ("air-operations",)),
+    SourceAlias("aircrew", ("aircrew",)),
+    SourceAlias(
+        "basic-regulation",
+        ("basic-regulation",),
+        fallback_page_url=(
+            "https://www.easa.europa.eu/en/document-library/easy-access-rules/"
+            "easy-access-rules-basic-regulation-regulation-eu-20181139"
+        ),
     ),
-    SourceSpec(
-        slug="aircrew",
-        source_family="ear",
-        title="Easy Access Rules for Aircrew",
-        page_url="https://www.easa.europa.eu/en/document-library/easy-access-rules/easy-access-rules-aircrew-regulation",
-    ),
-    SourceSpec(
-        slug="basic-regulation",
-        source_family="ear",
-        title="Easy Access Rules for the Basic Regulation",
-        page_url="https://www.easa.europa.eu/en/document-library/easy-access-rules/easy-access-rules-basic-regulation",
-    ),
-    SourceSpec(
-        slug="occurrence-reporting",
-        source_family="rulebook",
-        title="Occurrence Reporting Rule Book",
-        page_url="https://www.easa.europa.eu/en/document-library/easy-access-rules/easy-access-rules-occurrence-reporting",
-    ),
+    SourceAlias("initial-airworthiness", ("initial-airworthiness",)),
+    SourceAlias("continuing-airworthiness", ("continuing-airworthiness",)),
+    SourceAlias("aerodromes", ("aerodromes",)),
+    SourceAlias("atm-ans", ("air-traffic-managementair-navigation-services",)),
+    SourceAlias("sera", ("standardised-european-rules",)),
+    SourceAlias("occurrence-reporting", ("occurrence-reporting",), source_family="rulebook"),
 ]
 
 
-def get_source(slug: str) -> SourceSpec:
-    for source in KNOWN_SOURCES:
-        if source.slug == slug:
-            return source
-    raise ValueError(f"Unknown source: {slug}")
+def get_alias(slug: str) -> SourceAlias | None:
+    for alias in SLUG_ALIASES:
+        if alias.slug == slug:
+            return alias
+    return None
 
 
-def list_sources() -> list[SourceSpec]:
-    return list(KNOWN_SOURCES)
+def list_aliases() -> list[SourceAlias]:
+    return list(SLUG_ALIASES)

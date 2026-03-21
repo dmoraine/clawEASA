@@ -15,7 +15,7 @@ from claw_easa.ingest.repository import (
     record_download,
     upsert_source_document_from_values,
 )
-from claw_easa.ingest.sources import get_source
+from claw_easa.ingest.sources import SourceSpec, get_alias
 
 log = logging.getLogger(__name__)
 
@@ -28,10 +28,49 @@ def _open_db() -> Database:
     return db
 
 
-def fetch_source(slug: str) -> dict:
+def _resolve_source(slug: str, *, url: str | None = None) -> SourceSpec:
+    """Build a SourceSpec by resolving the slug against the EASA catalog.
+
+    If *url* is provided it is used directly; otherwise the catalog
+    scraper discovers the current page URL from the EASA website.
+    """
+    alias = get_alias(slug)
+    source_family = alias.source_family if alias else "ear"
+    language = alias.language if alias else "en"
+
+    if url:
+        return SourceSpec(
+            slug=slug,
+            source_family=source_family,
+            title=slug,
+            language=language,
+            source_url=url,
+        )
+
+    from claw_easa.ingest.catalog import EasyAccessRulesCatalogScraper
+
+    catalog = EasyAccessRulesCatalogScraper()
+    entry = catalog.resolve(slug)
+
+    effective_slug = alias.slug if alias else slug
+    return SourceSpec(
+        slug=effective_slug,
+        source_family=source_family,
+        title=entry.title,
+        language=language,
+        page_url=entry.page_url,
+    )
+
+
+def fetch_source(slug: str, *, url: str | None = None) -> dict:
+    """Fetch an EASA source document.
+
+    The page URL is resolved dynamically from the EASA catalog unless
+    *url* is given explicitly.
+    """
     from claw_easa.ingest.scraper import EASASourceFetcher
 
-    source = get_source(slug)
+    source = _resolve_source(slug, url=url)
     settings = get_settings()
     data_dir = Path(settings.data_dir)
 

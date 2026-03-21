@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import click
 import logging
+from pathlib import Path
 
 from claw_easa.db import Database
 from claw_easa.db.migrations import MigrationRunner
@@ -117,15 +118,52 @@ def ingest_group() -> None:
 
 @ingest_group.command("fetch")
 @click.argument("slug")
-def ingest_fetch_cmd(slug: str) -> None:
-    """Fetch a source document by slug."""
+@click.option("--url", default=None, help="Explicit download URL (skips catalog resolution)")
+def ingest_fetch_cmd(slug: str, url: str | None) -> None:
+    """Fetch a source document by slug.
+
+    The download URL is resolved dynamically from the EASA catalog.
+    Use --url to bypass catalog resolution and provide a direct link.
+    """
     from claw_easa.ingest.service import fetch_source
 
-    result = fetch_source(slug)
+    result = fetch_source(slug, url=url)
     click.echo(
         f"Fetched {slug}: document_id={result['document_id']}, "
         f"path={result['local_path']}"
     )
+
+
+@ingest_group.command("diagnose")
+@click.argument("slug")
+def ingest_diagnose_cmd(slug: str) -> None:
+    """Run coverage diagnostics on a parsed source.
+
+    Cross-references the XML Table of Contents with parsed entries
+    to detect missing articles, uncaptured headings, and empty bodies.
+    """
+    from claw_easa.ingest.repository import get_document_by_slug, get_latest_source_file
+    from claw_easa.ingest.service import _open_db, _materialize_parse_path
+    from claw_easa.ingest.diagnostics import coverage_report, format_report
+
+    db = _open_db()
+    try:
+        doc = get_document_by_slug(db, slug)
+        if not doc:
+            click.echo(f"Document not found: {slug}", err=True)
+            return
+
+        source_file = get_latest_source_file(db, doc["id"])
+        if not source_file:
+            click.echo(f"No source file for: {slug}", err=True)
+            return
+
+        path = Path(source_file["local_path"])
+        parse_path = _materialize_parse_path(path)
+        report = coverage_report(parse_path, doc["title"])
+        click.echo(format_report(report))
+    finally:
+        db.close()
 
 
 @ingest_group.command("parse")
@@ -308,31 +346,54 @@ def ask_cmd(query: str, strict: bool) -> None:
 
 @main.command("ear-list")
 def ear_list_cmd() -> None:
-    """List known Easy Access Rules sources (built-in catalog)."""
-    from claw_easa.ingest.sources import list_sources
+    """List short aliases for common Easy Access Rules.
 
-    for src in list_sources():
-        click.echo(f"  {src.slug:<25} {src.title}")
+    These aliases are convenience shortcuts for 'ingest fetch'.
+    URLs are resolved dynamically from the EASA catalog — not hardcoded.
+    Run 'ear-discover' to see all available sources.
+    """
+    from claw_easa.ingest.sources import list_aliases
+
+    click.echo("Aliases (use with 'ingest fetch <alias>'):\n")
+    for alias in list_aliases():
+        click.echo(f"  {alias.slug:<30} keywords: {', '.join(alias.match_keywords)}")
 
 
 @main.command("ear-discover")
-def ear_discover_cmd() -> None:
-    """Discover Easy Access Rules available on the EASA website."""
+@click.option("--refresh", is_flag=True, help="Force refresh from EASA website")
+def ear_discover_cmd(refresh: bool) -> None:
+    """Discover Easy Access Rules available on the EASA website.
+
+    Results are cached locally for 1 hour.  Use --refresh to force
+    a fresh scrape.  Any slug shown here can be used directly with
+    'ingest fetch'.
+    """
     from claw_easa.ingest.catalog import EasyAccessRulesCatalogScraper
+    from claw_easa.ingest.sources import get_alias
 
     click.echo("Scanning EASA website for Easy Access Rules...")
     try:
         scraper = EasyAccessRulesCatalogScraper()
-        entries = scraper.discover()
+        entries = scraper.discover(force_refresh=refresh)
         if not entries:
             click.echo("No Easy Access Rules found.")
             return
         click.echo(f"Found {len(entries)} Easy Access Rules:\n")
         for entry in entries:
-            click.echo(f"  {entry.slug:<35} {entry.title}")
-            click.echo(f"    {entry.page_url}")
+            alias = _find_alias_for_catalog_slug(entry.slug)
+            alias_hint = f"  (alias: {alias})" if alias else ""
+            click.echo(f"  {entry.slug:<50} {entry.title}")
+            click.echo(f"    {entry.page_url}{alias_hint}")
     except Exception as e:
         click.echo(f"Error discovering sources: {e}", err=True)
+
+
+def _find_alias_for_catalog_slug(catalog_slug: str) -> str | None:
+    from claw_easa.ingest.sources import SLUG_ALIASES
+    for alias in SLUG_ALIASES:
+        if any(kw in catalog_slug for kw in alias.match_keywords):
+            return alias.slug
+    return None
 
 
 @main.command("sources-list")
