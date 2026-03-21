@@ -68,18 +68,37 @@ def fetch_source(slug: str) -> dict:
 
 
 def _materialize_parse_path(path: Path) -> Path:
+    """Extract the main XML document from a ZIP archive.
+
+    EASA distributes Easy Access Rules as ZIP archives containing a flat
+    Office Open XML file.  Some archives also include OPC metadata files
+    like ``[Content_Types].xml`` — these are filtered out automatically.
+    When multiple candidate XML files remain, the largest is selected
+    (it is almost certainly the regulation document).
+    """
     if path.suffix.lower() != '.zip':
         return path
 
     with zipfile.ZipFile(path) as zf:
-        names = [name for name in zf.namelist() if not name.endswith('/')]
-        xml_names = [name for name in names if name.lower().endswith('.xml')]
-        if len(xml_names) != 1:
-            raise ValueError(f"Expected exactly one XML file in archive {path}, found {len(xml_names)}")
-        xml_name = xml_names[0]
-        out_path = path.with_suffix('')
-        if out_path.suffix.lower() != '.xml':
-            out_path = out_path.with_suffix('.xml')
+        candidates: list[tuple[str, int]] = []
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            name_lower = info.filename.lower()
+            if not name_lower.endswith('.xml'):
+                continue
+            basename = Path(info.filename).name
+            if basename.startswith('[') or basename.startswith('_'):
+                continue
+            candidates.append((info.filename, info.file_size))
+
+        if not candidates:
+            raise ValueError(f"No XML document found inside archive {path}")
+
+        xml_name = max(candidates, key=lambda c: c[1])[0]
+        log.info("Extracting %s from %s", xml_name, path.name)
+
+        out_path = path.with_suffix('.xml')
         zf.extract(xml_name, path.parent)
         extracted = path.parent / xml_name
         if extracted != out_path:

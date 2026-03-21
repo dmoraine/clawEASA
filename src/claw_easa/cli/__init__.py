@@ -308,11 +308,31 @@ def ask_cmd(query: str, strict: bool) -> None:
 
 @main.command("ear-list")
 def ear_list_cmd() -> None:
-    """List known Easy Access Rules sources."""
+    """List known Easy Access Rules sources (built-in catalog)."""
     from claw_easa.ingest.sources import list_sources
 
     for src in list_sources():
         click.echo(f"  {src.slug:<25} {src.title}")
+
+
+@main.command("ear-discover")
+def ear_discover_cmd() -> None:
+    """Discover Easy Access Rules available on the EASA website."""
+    from claw_easa.ingest.catalog import EasyAccessRulesCatalogScraper
+
+    click.echo("Scanning EASA website for Easy Access Rules...")
+    try:
+        scraper = EasyAccessRulesCatalogScraper()
+        entries = scraper.discover()
+        if not entries:
+            click.echo("No Easy Access Rules found.")
+            return
+        click.echo(f"Found {len(entries)} Easy Access Rules:\n")
+        for entry in entries:
+            click.echo(f"  {entry.slug:<35} {entry.title}")
+            click.echo(f"    {entry.page_url}")
+    except Exception as e:
+        click.echo(f"Error discovering sources: {e}", err=True)
 
 
 @main.command("sources-list")
