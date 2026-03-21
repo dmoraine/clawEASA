@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,12 +29,13 @@ class EASASourceFetcher:
         target_dir = data_dir / "downloads" / source.slug
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        filename = download_url.rsplit("/", 1)[-1] or f"{source.slug}.docx"
-        local_path = target_dir / filename
-
-        log.info("Downloading %s -> %s", download_url, local_path)
+        log.info("Downloading %s", download_url)
         resp = requests.get(download_url, timeout=120, stream=True)
         resp.raise_for_status()
+
+        filename = self._filename_from_response(resp, source.slug)
+        local_path = target_dir / filename
+        log.info("Saving to %s", local_path)
 
         hasher = hashlib.sha256()
         with open(local_path, "wb") as f:
@@ -48,18 +50,57 @@ class EASASourceFetcher:
             download_url=download_url,
         )
 
+    def _filename_from_response(self, resp: requests.Response, slug: str) -> str:
+        disposition = resp.headers.get("content-disposition", "")
+        match = re.search(r'filename="?([^";]+)"?', disposition, re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+        final_url = str(resp.url)
+        leaf = final_url.rstrip("/").rsplit("/", 1)[-1]
+        if leaf and leaf.lower() != "en":
+            return leaf
+
+        content_type = resp.headers.get("content-type", "").lower()
+        if "zip" in content_type:
+            return f"{slug}.zip"
+        if "xml" in content_type:
+            return f"{slug}.xml"
+        if "pdf" in content_type:
+            return f"{slug}.pdf"
+        return f"{slug}.bin"
+
     def _resolve_download_url(self, source: SourceSpec) -> str:
         resp = requests.get(source.page_url, timeout=30)
         resp.raise_for_status()
 
         soup = BeautifulSoup(resp.text, "html.parser")
 
+        preferred_links: list[str] = []
+        fallback_links: list[str] = []
+
         for link in soup.find_all("a", href=True):
-            href = link["href"]
-            if href.endswith(".docx") or "download" in href.lower():
-                if not href.startswith("http"):
-                    href = f"https://www.easa.europa.eu{href}"
-                return href
+            href = link["href"].strip()
+            text = " ".join(link.get_text(" ", strip=True).split())
+            href_lower = href.lower()
+            text_lower = text.lower()
+
+            if not href.startswith("http"):
+                absolute_href = f"https://www.easa.europa.eu{href}"
+            else:
+                absolute_href = href
+
+            if "xml" in text_lower and "/downloads/" in href_lower:
+                preferred_links.append(absolute_href)
+            elif any(token in text_lower for token in ["easy access rules", "pdf", "download"]) and "/downloads/" in href_lower:
+                fallback_links.append(absolute_href)
+            elif href_lower.endswith((".xml", ".docx", ".pdf")):
+                fallback_links.append(absolute_href)
+
+        if preferred_links:
+            return preferred_links[0]
+        if fallback_links:
+            return fallback_links[0]
 
         raise ValueError(
             f"Could not resolve download URL for {source.slug} from {source.page_url}"

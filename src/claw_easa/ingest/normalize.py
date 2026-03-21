@@ -84,6 +84,7 @@ class CanonicalPersister:
                 empty_entries_skipped = 0
 
                 seen_entries: set[tuple[int, int, int, str, str, str, str]] = set()
+                seen_entry_refs_global: dict[str, int] = {}
 
                 for part in parsed.parts:
                     cur.execute(
@@ -119,8 +120,6 @@ class CanonicalPersister:
                             section_id = cur.lastrowid
                             sections_count += 1
 
-                            seen_entry_refs: dict[str, int] = {}
-
                             for entry in section.entries:
                                 entry_ref = normalize_title(entry.entry_ref)
                                 title = derive_display_title(entry.entry_ref, entry.title)
@@ -131,9 +130,9 @@ class CanonicalPersister:
                                     empty_entries_skipped += 1
                                     continue
 
-                                seen_entry_refs[entry_ref] = seen_entry_refs.get(entry_ref, 0) + 1
-                                if seen_entry_refs[entry_ref] > 1:
-                                    entry_ref = f"{entry_ref}#{seen_entry_refs[entry_ref]}"
+                                seen_entry_refs_global[entry_ref] = seen_entry_refs_global.get(entry_ref, 0) + 1
+                                if seen_entry_refs_global[entry_ref] > 1:
+                                    entry_ref = f"{entry_ref}#{seen_entry_refs_global[entry_ref]}"
 
                                 dedupe_key = (
                                     document_id,

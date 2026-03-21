@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS regulation_entries (
     section_id INTEGER NOT NULL REFERENCES regulation_sections(id) ON DELETE CASCADE,
     entry_ref TEXT NOT NULL,
     entry_type TEXT NOT NULL
-        CHECK(entry_type IN ('IR', 'AMC', 'GM', 'CS', 'article', 'appendix', 'FAQ')),
+        CHECK(entry_type IN ('IR', 'AMC', 'GM', 'CS', 'INFO', 'article', 'appendix', 'FAQ')),
     title TEXT NOT NULL,
     body_markdown TEXT,
     body_text TEXT,
