@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-REGULATIONS_FAQ_ROOT_URL = "https://www.easa.europa.eu/en/faq"
+REGULATIONS_FAQ_ROOT_URL = "https://www.easa.europa.eu/en/the-agency/faqs/regulations"
 
 
 @dataclass(frozen=True)

@@ -107,9 +107,9 @@ class EasyAccessRulesCatalogScraper:
     # ── Scraping ──────────────────────────────────────────────────────
 
     def _scrape(self) -> list[CatalogEntry]:
+        from claw_easa.ingest import http
         log.info("Scraping EASA catalog at %s", self.base_url)
-        resp = requests.get(self.base_url, timeout=30)
-        resp.raise_for_status()
+        resp = http.get(self.base_url)
         soup = BeautifulSoup(resp.text, "html.parser")
 
         entries: list[CatalogEntry] = []

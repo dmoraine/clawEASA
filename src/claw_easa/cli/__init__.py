@@ -184,6 +184,66 @@ def ingest_parse_cmd(slug: str) -> None:
         click.echo(f"  Empty entries skipped: {result['empty_entries_skipped']}")
 
 
+@ingest_group.command("faq-discover")
+def ingest_faq_discover_cmd() -> None:
+    """Discover available FAQ domains on the EASA website."""
+    from claw_easa.ingest.faq_service import discover_faq_domains
+
+    click.echo("Scanning EASA FAQ pages...")
+    domains = discover_faq_domains()
+    if not domains:
+        click.echo("No FAQ domains found.")
+        return
+    click.echo(f"Found {len(domains)} FAQ domains:\n")
+    for d in domains:
+        click.echo(f"  {d.slug:<50} {d.title}")
+
+
+@ingest_group.command("faq")
+@click.argument("slug")
+def ingest_faq_cmd(slug: str) -> None:
+    """Ingest FAQs for a specific domain (e.g. 'air-operations').
+
+    Use 'ingest faq-discover' to see available domains.
+    """
+    from claw_easa.ingest.faq_service import discover_faq_domains, ingest_faq_domain
+
+    domains = discover_faq_domains()
+    domain = next((d for d in domains if d.slug == slug), None)
+    if not domain:
+        click.echo(f"FAQ domain '{slug}' not found. Run 'ingest faq-discover'.", err=True)
+        return
+
+    click.echo(f"Ingesting FAQs for: {domain.title}...")
+    result = ingest_faq_domain(domain)
+    click.echo(f"Done: {result['ingested']} FAQs ingested for '{result['domain']}'.")
+
+
+@ingest_group.command("faq-all")
+@click.option("--delay", default=1.0, help="Seconds between requests (default: 1)")
+def ingest_faq_all_cmd(delay: float) -> None:
+    """Ingest all FAQ domains from the EASA regulations FAQ index.
+
+    Crawls every sub-page linked from the regulations FAQ root and
+    ingests all Q&A pairs.  Use --delay to control request pacing.
+    """
+    from claw_easa.ingest.faq_service import ingest_all_faqs
+
+    def progress(slug: str, current: int, total: int) -> None:
+        click.echo(f"[{current}/{total}] {slug}...")
+
+    click.echo("Ingesting all FAQ domains from EASA regulations...")
+    results = ingest_all_faqs(delay=delay, progress_cb=progress)
+
+    total_faqs = sum(r["ingested"] for r in results)
+    domains_with_content = sum(1 for r in results if r["ingested"] > 0)
+    errors = sum(1 for r in results if r.get("error"))
+
+    click.echo(f"\nDone: {total_faqs} FAQs from {domains_with_content} domains.")
+    if errors:
+        click.echo(f"  Errors: {errors} domains failed.")
+
+
 # --- Index commands ---
 
 

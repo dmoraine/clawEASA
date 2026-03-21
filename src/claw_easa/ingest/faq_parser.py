@@ -1,10 +1,21 @@
+"""EASA FAQ page parser.
+
+EASA FAQ pages use a consistent structure:
+  - ``div.faq-child.expand`` contains each Q&A pair
+  - ``<h4>`` inside is the question
+  - ``div.body.field`` sibling contains the answer HTML
+
+All Q&A pairs are on a single page (no per-question detail pages).
+A ``div.faq-category`` wrapper (when present) groups questions by topic.
+"""
 from __future__ import annotations
 
 import logging
 import re
 from dataclasses import dataclass, field
-from html.parser import HTMLParser
 from urllib.parse import urljoin
+
+from bs4 import BeautifulSoup, Tag
 
 log = logging.getLogger(__name__)
 
@@ -15,155 +26,90 @@ EASA_REF_PATTERN = re.compile(
 
 
 @dataclass
-class _FAQDomainInfo:
+class FAQItem:
+    question: str
+    answer_text: str
+    category: str = ""
+    detected_refs: list[str] = field(default_factory=list)
+
+
+@dataclass
+class FAQDomainLink:
     slug: str
     title: str
     url: str
 
 
-@dataclass
-class _FAQCandidate:
-    question: str
-    url: str
-    category: str = ""
-    detected_refs: list[str] = field(default_factory=list)
+def parse_faq_root_page(html: str, base_url: str) -> list[FAQDomainLink]:
+    """Extract FAQ domain links from the EASA FAQ root page."""
+    soup = BeautifulSoup(html, "html.parser")
+    domains: list[FAQDomainLink] = []
+    seen: set[str] = set()
+
+    for link in soup.find_all("a", href=True):
+        href = link["href"]
+        text = link.get_text(strip=True)
+        if not text or len(text) <= 5:
+            continue
+        if "/faqs/" not in href and "/faq/" not in href:
+            continue
+
+        absolute = urljoin(base_url, href)
+        slug = absolute.rstrip("/").rsplit("/", 1)[-1]
+        slug = slug.split("#")[0]
+
+        if slug in seen or slug in ("faq", "faqs", "website"):
+            continue
+        seen.add(slug)
+        domains.append(FAQDomainLink(slug=slug, title=text, url=absolute))
+
+    return domains
 
 
-@dataclass
-class _FAQEntry:
-    question: str
-    answer_text: str
-    url: str
-    category: str = ""
-    detected_refs: list[str] = field(default_factory=list)
+def parse_faq_page(html: str) -> list[FAQItem]:
+    """Extract all FAQ items from an EASA FAQ page.
 
+    Works with the ``div.faq-child`` accordion structure used on
+    https://www.easa.europa.eu/en/the-agency/faqs/* pages.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    items: list[FAQItem] = []
 
-class FAQRegulationsRootParser(HTMLParser):
-    def __init__(self, base_url: str) -> None:
-        super().__init__()
-        self.base_url = base_url
-        self.domains: list[_FAQDomainInfo] = []
-        self._in_link = False
-        self._current_href = ""
-        self._current_text = ""
+    faq_children = soup.find_all(class_="faq-child")
+    if not faq_children:
+        faq_children = soup.find_all("div", class_="expand")
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == "a":
-            attr_dict = dict(attrs)
-            href = attr_dict.get("href", "")
-            if href and "faq" in href.lower():
-                self._in_link = True
-                self._current_href = urljoin(self.base_url, href)
-                self._current_text = ""
+    current_category = ""
 
-    def handle_data(self, data: str) -> None:
-        if self._in_link:
-            self._current_text += data
+    for child in faq_children:
+        cat_parent = child.find_parent(class_="faq-category")
+        if cat_parent:
+            cat_title = cat_parent.find(class_="category-title")
+            if cat_title:
+                current_category = cat_title.get_text(strip=True)
 
-    def handle_endtag(self, tag: str) -> None:
-        if tag == "a" and self._in_link:
-            self._in_link = False
-            text = self._current_text.strip()
-            if text and self._current_href:
-                slug = self._current_href.rstrip("/").rsplit("/", 1)[-1]
-                self.domains.append(_FAQDomainInfo(
-                    slug=slug,
-                    title=text,
-                    url=self._current_href,
-                ))
+        h4 = child.find("h4")
+        if not h4:
+            continue
+        question = h4.get_text(strip=True)
+        if not question or len(question) < 10:
+            continue
 
+        body_div = child.find(class_="body")
+        if not body_div:
+            body_div = child.find(class_="field")
+        answer = body_div.get_text("\n", strip=True) if body_div else ""
 
-class FAQIndexParser(HTMLParser):
-    def __init__(self, base_url: str) -> None:
-        super().__init__()
-        self.base_url = base_url
-        self.candidates: list[_FAQCandidate] = []
-        self._in_link = False
-        self._current_href = ""
-        self._current_text = ""
-        self._current_category = ""
+        if not answer or len(answer) < 10:
+            continue
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        attr_dict = dict(attrs)
-        if tag == "a":
-            href = attr_dict.get("href", "")
-            if href:
-                self._in_link = True
-                self._current_href = urljoin(self.base_url, href)
-                self._current_text = ""
-        if tag in ("h2", "h3", "h4"):
-            self._current_category = ""
+        detected = EASA_REF_PATTERN.findall(question + " " + answer)
 
-    def handle_data(self, data: str) -> None:
-        if self._in_link:
-            self._current_text += data
-        else:
-            stripped = data.strip()
-            if stripped:
-                self._current_category = stripped
+        items.append(FAQItem(
+            question=question,
+            answer_text=answer,
+            category=current_category,
+            detected_refs=list(set(detected)),
+        ))
 
-    def handle_endtag(self, tag: str) -> None:
-        if tag == "a" and self._in_link:
-            self._in_link = False
-            text = self._current_text.strip()
-            if text and "?" in text and len(text) > 15:
-                detected = EASA_REF_PATTERN.findall(text)
-                self.candidates.append(_FAQCandidate(
-                    question=text,
-                    url=self._current_href,
-                    category=self._current_category,
-                    detected_refs=detected,
-                ))
-
-
-class FAQDetailParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self._text_parts: list[str] = []
-        self._in_content = False
-        self._depth = 0
-
-    def reset(self) -> None:
-        super().reset()
-        self._text_parts = []
-        self._in_content = False
-        self._depth = 0
-
-    def feed(self, data: str) -> None:
-        self.reset()
-        super().feed(data)
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        attr_dict = dict(attrs)
-        css_class = attr_dict.get("class", "")
-        if "field--name-body" in css_class or "faq-answer" in css_class:
-            self._in_content = True
-            self._depth = 0
-        if self._in_content:
-            self._depth += 1
-            if tag in ("br", "p"):
-                self._text_parts.append("\n")
-
-    def handle_data(self, data: str) -> None:
-        if self._in_content:
-            self._text_parts.append(data)
-
-    def handle_endtag(self, tag: str) -> None:
-        if self._in_content:
-            self._depth -= 1
-            if self._depth <= 0:
-                self._in_content = False
-            if tag == "p":
-                self._text_parts.append("\n")
-
-    def build(self, url: str, category: str = "") -> _FAQEntry:
-        answer_text = "".join(self._text_parts).strip()
-        answer_text = re.sub(r'\n{3,}', '\n\n', answer_text)
-        detected = EASA_REF_PATTERN.findall(answer_text)
-        return _FAQEntry(
-            question="",
-            answer_text=answer_text,
-            url=url,
-            category=category,
-            detected_refs=detected,
-        )
+    return items

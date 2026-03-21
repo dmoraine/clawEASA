@@ -29,9 +29,9 @@ class EASASourceFetcher:
         target_dir = data_dir / "downloads" / source.slug
         target_dir.mkdir(parents=True, exist_ok=True)
 
+        from claw_easa.ingest import http
         log.info("Downloading %s", download_url)
-        resp = requests.get(download_url, timeout=120, stream=True)
-        resp.raise_for_status()
+        resp = http.get(download_url, timeout=120, stream=True)
 
         filename = self._filename_from_response(resp, source.slug)
         local_path = target_dir / filename
@@ -71,8 +71,8 @@ class EASASourceFetcher:
         return f"{slug}.bin"
 
     def _resolve_download_url(self, source: SourceSpec) -> str:
-        resp = requests.get(source.page_url, timeout=30)
-        resp.raise_for_status()
+        from claw_easa.ingest import http
+        resp = http.get(source.page_url)
 
         soup = BeautifulSoup(resp.text, "html.parser")
 
