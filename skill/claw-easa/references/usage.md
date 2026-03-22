@@ -13,10 +13,23 @@ The skill package is the installable unit for OpenClaw. The repository root is t
 ```bash
 # from repository root
 python -m claw_easa.cli status
-python -m claw_easa.cli ear-discover       # list EARs available on EASA website
-python -m claw_easa.cli ear-list           # list built-in known sources
-python -m claw_easa.cli ingest fetch air-ops   # download ZIP archive
-python -m claw_easa.cli ingest parse air-ops   # extract XML + parse
+python -m claw_easa.cli sources-list             # list all ingested sources
+python -m claw_easa.cli sources-list --type ear   # only Easy Access Rules
+python -m claw_easa.cli sources-list --type faq   # only FAQ domains
+
+# Discover and ingest Easy Access Rules
+python -m claw_easa.cli ear-discover              # list EARs available on EASA website
+python -m claw_easa.cli ear-list                  # list built-in source aliases
+python -m claw_easa.cli ingest fetch air-ops      # download ZIP archive
+python -m claw_easa.cli ingest parse air-ops      # extract XML + parse
+python -m claw_easa.cli ingest diagnose air-ops   # verify coverage vs source XML
+
+# Ingest EASA FAQs
+python -m claw_easa.cli ingest faq-discover       # list available FAQ domains
+python -m claw_easa.cli ingest faq air-operations # ingest one FAQ domain
+python -m claw_easa.cli ingest faq-all            # ingest all FAQ domains (~200)
+
+# Query
 python -m claw_easa.cli lookup ORO.FTL.110
 python -m claw_easa.cli refs "split duty"
 python -m claw_easa.cli snippets "fatigue management"
@@ -28,6 +41,14 @@ python -m claw_easa.cli ask "What are the operator responsibilities for FTL?"
 EASA distributes Easy Access Rules as ZIP archives containing a flat Office Open XML file.
 The ingestion pipeline handles extraction automatically: `ingest fetch` downloads the archive,
 and `ingest parse` extracts the XML before parsing it into the regulatory hierarchy.
+
+## FAQ ingestion
+
+EASA publishes FAQ pages under `https://www.easa.europa.eu/en/the-agency/faqs/regulations`.
+The `ingest faq-all` command crawls every sub-page linked from this root and extracts Q&A
+pairs from the accordion structure (`div.faq-child`).  Each sub-domain becomes its own
+source document (e.g. `faq-air-operations`, `faq-part-145`).  A 1-second delay between
+requests is applied by default to avoid rate-limiting (configurable with `--delay`).
 
 ## Installing the skill locally for OpenClaw
 

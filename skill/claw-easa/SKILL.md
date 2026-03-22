@@ -12,8 +12,15 @@ Preferred commands:
 - `claw-easa hybrid "<query>"` for mixed lexical + semantic retrieval
 - `claw-easa ask "<question>"` for routed natural-language queries
 - `claw-easa status` to verify corpus/index availability
+- `claw-easa sources-list` to list ingested EARs and FAQ domains (supports `--type ear|faq`)
 - `claw-easa ear-discover` to list Easy Access Rules available on the EASA website
-- `claw-easa ear-list` to list built-in known sources
+- `claw-easa ear-list` to list built-in known source aliases
+- `claw-easa ingest fetch <slug>` to download a source (use `--url` to bypass catalog)
+- `claw-easa ingest parse <slug>` to parse a fetched source into the database
+- `claw-easa ingest diagnose <slug>` to verify parser coverage against the source XML
+- `claw-easa ingest faq-all` to ingest all EASA FAQs (crawls every sub-domain)
+- `claw-easa ingest faq <domain>` to ingest FAQs for a specific domain
+- `claw-easa ingest faq-discover` to list available FAQ domains on the EASA website
 
 Answering rules:
 - Prefer exact lookup when the user gives a regulation reference.

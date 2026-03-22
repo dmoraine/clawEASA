@@ -43,15 +43,29 @@ claw-easa init
 # Discover Easy Access Rules available on the EASA website
 claw-easa ear-discover
 
-# List built-in known sources
+# List built-in aliases for common sources
 claw-easa ear-list
 
 # Ingest a regulation source (downloads ZIP, extracts XML, parses)
 claw-easa ingest fetch air-ops
 claw-easa ingest parse air-ops
 
+# Verify parser coverage against the source XML
+claw-easa ingest diagnose air-ops
+
+# Ingest all EASA FAQs (crawls every sub-domain)
+claw-easa ingest faq-all
+
+# Or ingest a single FAQ domain
+claw-easa ingest faq air-operations
+
 # Build search index
 claw-easa index build
+
+# List everything that has been ingested
+claw-easa sources-list              # all sources
+claw-easa sources-list --type ear   # only EARs
+claw-easa sources-list --type faq   # only FAQs
 
 # Query
 claw-easa lookup ORO.FTL.110

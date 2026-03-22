@@ -457,8 +457,14 @@ def _find_alias_for_catalog_slug(catalog_slug: str) -> str | None:
 
 
 @main.command("sources-list")
-def sources_list_cmd() -> None:
-    """List ingested source documents."""
+@click.option("--type", "filter_type", default=None, type=click.Choice(["ear", "faq", "all"]),
+              help="Filter by source type (default: all)")
+def sources_list_cmd(filter_type: str | None) -> None:
+    """List ingested source documents.
+
+    Shows EAR (Easy Access Rules) and FAQ sources separately with
+    entry counts.  Use --type ear or --type faq to filter.
+    """
     from claw_easa.ingest.repository import list_documents
 
     db = Database()
@@ -470,9 +476,44 @@ def sources_list_cmd() -> None:
         if not docs:
             click.echo("No documents ingested yet.")
             return
-        for doc in docs:
-            click.echo(
-                f"  {doc['slug']:<25} {doc['status']:<10} {doc['title']}"
-            )
+
+        with db.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT sd.id, COUNT(re.id) as cnt "
+                    "FROM source_documents sd "
+                    "LEFT JOIN regulation_parts rp ON rp.document_id = sd.id "
+                    "LEFT JOIN regulation_subparts rs ON rs.part_id = rp.id "
+                    "LEFT JOIN regulation_sections rsec ON rsec.subpart_id = rs.id "
+                    "LEFT JOIN regulation_entries re ON re.section_id = rsec.id "
+                    "GROUP BY sd.id"
+                )
+                counts = {row["id"]: row["cnt"] for row in cur.fetchall()}
+
+        ears = [d for d in docs if d["source_family"] != "faq"]
+        faqs = [d for d in docs if d["source_family"] == "faq"]
+
+        show_ear = filter_type in (None, "all", "ear")
+        show_faq = filter_type in (None, "all", "faq")
+
+        if show_ear and ears:
+            click.echo(f"Easy Access Rules ({len(ears)}):\n")
+            for doc in ears:
+                cnt = counts.get(doc["id"], 0)
+                entries_info = f"{cnt} entries" if cnt else doc["status"]
+                click.echo(f"  {doc['slug']:<30} {entries_info:<15} {doc['title']}")
+            click.echo()
+
+        if show_faq and faqs:
+            total_faq_entries = sum(counts.get(d["id"], 0) for d in faqs)
+            domains_with_content = sum(1 for d in faqs if counts.get(d["id"], 0) > 0)
+            click.echo(f"FAQ domains ({domains_with_content} with content, {total_faq_entries} total FAQs):\n")
+            for doc in faqs:
+                cnt = counts.get(doc["id"], 0)
+                if cnt > 0:
+                    click.echo(f"  {doc['slug']:<50} {cnt:>4} FAQs  {doc['title']}")
+            empty = len(faqs) - domains_with_content
+            if empty:
+                click.echo(f"  ({empty} empty domains not shown)")
     finally:
         db.close()

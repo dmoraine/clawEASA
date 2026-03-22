@@ -27,6 +27,8 @@ class CatalogEntry:
 
 
 class EasyAccessRulesCatalogScraper:
+    _MAX_PAGES = 20
+
     def __init__(
         self,
         base_url: str = EASA_EAR_INDEX_URL,
@@ -109,9 +111,32 @@ class EasyAccessRulesCatalogScraper:
     def _scrape(self) -> list[CatalogEntry]:
         from claw_easa.ingest import http
         log.info("Scraping EASA catalog at %s", self.base_url)
-        resp = http.get(self.base_url)
-        soup = BeautifulSoup(resp.text, "html.parser")
 
+        seen: set[str] = set()
+        all_entries: list[CatalogEntry] = []
+
+        for page_num in range(self._MAX_PAGES):
+            url = self.base_url if page_num == 0 else f"{self.base_url}?page={page_num}"
+            resp = http.get(url)
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            page_entries = self._extract_entries(soup)
+            if not page_entries:
+                break
+
+            for entry in page_entries:
+                if entry.slug not in seen:
+                    seen.add(entry.slug)
+                    all_entries.append(entry)
+
+            log.debug("Page %d: %d entries", page_num, len(page_entries))
+
+        log.info("Discovered %d Easy Access Rules across %d page(s)",
+                 len(all_entries), min(page_num + 1, self._MAX_PAGES))
+        return all_entries
+
+    @staticmethod
+    def _extract_entries(soup: BeautifulSoup) -> list[CatalogEntry]:
         entries: list[CatalogEntry] = []
         for link in soup.find_all("a", href=True):
             href = link["href"]
@@ -125,15 +150,7 @@ class EasyAccessRulesCatalogScraper:
             slug = href.rstrip("/").rsplit("/", 1)[-1]
             slug = slug.replace("easy-access-rules-", "")
             entries.append(CatalogEntry(slug=slug, title=text, page_url=href))
-
-        seen: set[str] = set()
-        unique: list[CatalogEntry] = []
-        for entry in entries:
-            if entry.slug not in seen:
-                seen.add(entry.slug)
-                unique.append(entry)
-
-        return unique
+        return entries
 
     # ── File cache ────────────────────────────────────────────────────
 
