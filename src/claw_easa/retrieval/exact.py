@@ -26,9 +26,13 @@ def lookup_reference(db: Database, ref: str) -> list[dict]:
             return cur.fetchall()
 
 
-def search_references(db: Database, query: str, limit: int = 20) -> list[dict]:
+def search_references(
+    db: Database, query: str, limit: int = 20, *, slug: str | None = None,
+) -> list[dict]:
     fts = to_fts5_query(query)
     results: list[dict] = []
+
+    slug_clause = "AND d.slug = ? " if slug else ""
 
     if fts.has_terms:
         fts_sql = (
@@ -40,14 +44,15 @@ def search_references(db: Database, query: str, limit: int = 20) -> list[dict]:
             "JOIN source_documents d ON d.id = e.document_id "
             "JOIN regulation_parts p ON p.id = e.part_id "
             "JOIN regulation_subparts sp ON sp.id = e.subpart_id "
-            "WHERE entries_fts MATCH ? "
+            f"WHERE entries_fts MATCH ? {slug_clause}"
             "ORDER BY fts.rank "
             "LIMIT ?"
         )
+        params: tuple = (fts.match_expr, slug, limit) if slug else (fts.match_expr, limit)
         with db.connection() as conn:
             with conn.cursor() as cur:
                 try:
-                    cur.execute(fts_sql, (fts.match_expr, limit))
+                    cur.execute(fts_sql, params)
                     results = cur.fetchall()
                 except Exception:
                     log.warning("FTS query failed for: %s", fts.match_expr)
@@ -62,12 +67,13 @@ def search_references(db: Database, query: str, limit: int = 20) -> list[dict]:
             "JOIN source_documents d ON d.id = e.document_id "
             "JOIN regulation_parts p ON p.id = e.part_id "
             "JOIN regulation_subparts sp ON sp.id = e.subpart_id "
-            "WHERE e.entry_ref LIKE ? OR e.title LIKE ? OR e.body_text LIKE ? "
+            f"WHERE (e.entry_ref LIKE ? OR e.title LIKE ? OR e.body_text LIKE ?) {slug_clause}"
             "LIMIT ?"
         )
+        params = (like_pattern, like_pattern, like_pattern, slug, limit) if slug else (like_pattern, like_pattern, like_pattern, limit)
         with db.connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(like_sql, (like_pattern, like_pattern, like_pattern, limit))
+                cur.execute(like_sql, params)
                 results = cur.fetchall()
 
     return results

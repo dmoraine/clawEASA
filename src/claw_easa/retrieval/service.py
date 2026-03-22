@@ -26,27 +26,27 @@ def lookup(ref: str) -> list[dict]:
         db.close()
 
 
-def refs(query: str, limit: int = 20) -> list[dict]:
+def refs(query: str, limit: int = 20, *, slug: str | None = None) -> list[dict]:
     db = _open_db()
     try:
-        return search_references(db, query, limit=limit)
+        return search_references(db, query, limit=limit, slug=slug)
     finally:
         db.close()
 
 
-def snippets(query: str, limit: int = 10) -> list[dict]:
+def snippets(query: str, limit: int = 10, *, slug: str | None = None) -> list[dict]:
     db = _open_db()
     try:
-        return search_snippets(db, query, limit=limit)
+        return search_snippets(db, query, limit=limit, slug=slug)
     finally:
         db.close()
 
 
-def hybrid(query: str, top_k: int = 15) -> list[dict]:
+def hybrid(query: str, top_k: int = 15, *, slug: str | None = None) -> list[dict]:
     from claw_easa.retrieval.hybrid import hybrid_search
 
     db = _open_db()
     try:
-        return hybrid_search(db, query, top_k=top_k)
+        return hybrid_search(db, query, top_k=top_k, slug=slug)
     finally:
         db.close()

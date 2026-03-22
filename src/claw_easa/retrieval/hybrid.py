@@ -15,9 +15,20 @@ REFERENCE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+_WORD_RE = re.compile(r'[a-z]{3,}')
+
 
 def looks_like_reference(query: str) -> bool:
     return bool(REFERENCE_PATTERN.match(query.strip()))
+
+
+def _source_relevance_boost(query_words: set[str], slug: str) -> float:
+    """Generic boost when query words overlap with a source slug."""
+    slug_words = set(slug.replace("-", " ").split())
+    overlap = query_words & slug_words
+    if not overlap:
+        return 0.0
+    return min(0.15, 0.05 * len(overlap))
 
 
 def hybrid_search(
@@ -26,6 +37,8 @@ def hybrid_search(
     fts_weight: float = 0.4,
     vector_weight: float = 0.6,
     top_k: int = 15,
+    *,
+    slug: str | None = None,
 ) -> list[dict]:
     if looks_like_reference(query):
         exact = lookup_reference(db, query.strip())
@@ -35,12 +48,12 @@ def hybrid_search(
                 row["match_source"] = "exact"
             return exact
 
-    fts_results = search_references(db, query, limit=top_k)
+    fts_results = search_references(db, query, limit=top_k, slug=slug)
 
     try:
         from claw_easa.retrieval.vector import vector_search
 
-        vec_results = vector_search(db, query, top_k=top_k)
+        vec_results = vector_search(db, query, top_k=top_k, slug=slug)
     except FileNotFoundError:
         log.warning("FAISS index not found — falling back to FTS only")
         vec_results = []
@@ -69,6 +82,14 @@ def hybrid_search(
                 row["match_source"] = "vector"
                 row["id"] = eid
                 merged[eid] = row
+
+    if not slug:
+        query_words = set(_WORD_RE.findall(query.lower()))
+        if query_words:
+            for row in merged.values():
+                boost = _source_relevance_boost(query_words, row.get("slug", ""))
+                if boost > 0:
+                    row["hybrid_score"] += boost
 
     ranked = sorted(merged.values(), key=lambda r: r["hybrid_score"], reverse=True)
     return ranked[:top_k]

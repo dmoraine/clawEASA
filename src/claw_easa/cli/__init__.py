@@ -307,11 +307,12 @@ def lookup_cmd(ref: str) -> None:
 @main.command("refs")
 @click.argument("query")
 @click.option("--limit", default=10, help="Max results")
-def refs_cmd(query: str, limit: int) -> None:
+@click.option("--slug", default=None, help="Restrict search to a specific source slug")
+def refs_cmd(query: str, limit: int, slug: str | None) -> None:
     """Search regulation references."""
     from claw_easa.retrieval.service import refs
 
-    rows = refs(query, limit=limit)
+    rows = refs(query, limit=limit, slug=slug)
     if not rows:
         click.echo(f"No results for: {query}")
         return
@@ -326,12 +327,13 @@ def refs_cmd(query: str, limit: int) -> None:
 @main.command("snippets")
 @click.argument("query")
 @click.option("--limit", default=5, help="Max results")
-def snippets_cmd(query: str, limit: int) -> None:
+@click.option("--slug", default=None, help="Restrict search to a specific source slug")
+def snippets_cmd(query: str, limit: int, slug: str | None) -> None:
     """Search and show text snippets."""
     from claw_easa.retrieval.service import snippets
     from claw_easa.retrieval.formatting import compact_snippet
 
-    rows = snippets(query, limit=limit)
+    rows = snippets(query, limit=limit, slug=slug)
     if not rows:
         click.echo(f"No results for: {query}")
         return
@@ -345,11 +347,12 @@ def snippets_cmd(query: str, limit: int) -> None:
 @main.command("hybrid")
 @click.argument("query")
 @click.option("--top-k", default=10, help="Max results")
-def hybrid_cmd(query: str, top_k: int) -> None:
+@click.option("--slug", default=None, help="Restrict search to a specific source slug")
+def hybrid_cmd(query: str, top_k: int, slug: str | None) -> None:
     """Hybrid search (FTS + vector)."""
     from claw_easa.retrieval.service import hybrid
 
-    rows = hybrid(query, top_k=top_k)
+    rows = hybrid(query, top_k=top_k, slug=slug)
     if not rows:
         click.echo(f"No results for: {query}")
         return
