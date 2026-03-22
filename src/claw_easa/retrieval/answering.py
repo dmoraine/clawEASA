@@ -23,7 +23,8 @@ def format_exact_answer(rows: list[dict], normalized_query: str, rewritten_query
     lines = [f"Exact match for: {normalized_query}", "Core sources:"]
     for row in rows[:3]:
         lines.append(_format_source_line(row))
-        snippet = compact_snippet(row.get('body_text', ''), max_lines=3, max_chars=260)
+        text = row.get('chunk_text') or row.get('body_text', '')
+        snippet = compact_snippet(text, max_lines=3, max_chars=260, query=normalized_query)
         if snippet:
             lines.append(f"  {snippet}")
     return '\n'.join(lines)
@@ -40,7 +41,11 @@ def format_snippets_answer(rows: list[dict], rewritten_query: str) -> str:
     lines = [f"Relevant extracts for: {rewritten_query}", "Core sources:"]
     for row in rows[:5]:
         lines.append(_format_source_line(row))
-        snippet = compact_snippet(row.get('body_text', ''), max_lines=3, max_chars=280)
+        subref = row.get('matched_subref')
+        if subref:
+            lines.append(f"  [matched inside: {subref}]")
+        text = row.get('chunk_text') or row.get('body_text', '')
+        snippet = compact_snippet(text, max_lines=3, max_chars=280, query=rewritten_query)
         if snippet:
             lines.append(f"  {snippet}")
     return '\n'.join(lines)
@@ -57,8 +62,9 @@ def format_survey_answer(shaped: dict, rewritten_query: str) -> str:
     for row in core:
         lines.append(_format_source_line(row))
         snippet = compact_snippet(
-            row.get('body_text') or row.get('chunk_text', ''),
+            row.get('chunk_text') or row.get('body_text', ''),
             max_lines=2, max_chars=220,
+            query=rewritten_query,
         )
         if snippet:
             lines.append(f"  {snippet}")
@@ -101,8 +107,9 @@ def format_answer_answer(rows: list[dict], rewritten_query: str) -> str:
         shown_refs.add(row['entry_ref'])
         lines.append(_format_source_line(row))
         snippet = compact_snippet(
-            row.get('body_text') or row.get('chunk_text', ''),
+            row.get('chunk_text') or row.get('body_text', ''),
             max_lines=2, max_chars=220,
+            query=rewritten_query,
         )
         if snippet:
             lines.append(f"  {snippet}")

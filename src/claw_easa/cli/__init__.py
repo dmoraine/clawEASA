@@ -127,7 +127,11 @@ def _status_corpus(db: Database) -> None:
     if total_chunks:
         whole = chunk_counts.get("whole", 0)
         items = chunk_counts.get("list_item", 0)
-        click.echo(f"\nIndex:               {total_chunks} chunks ({whole} whole + {items} list-item)")
+        subheadings = chunk_counts.get("subheading", 0)
+        parts = [f"{whole} whole", f"{items} list-item"]
+        if subheadings:
+            parts.append(f"{subheadings} subheading")
+        click.echo(f"\nIndex:               {total_chunks} chunks ({' + '.join(parts)})")
 
 
 # --- DB commands ---
@@ -400,7 +404,11 @@ def snippets_cmd(query: str, limit: int, slug: str | None) -> None:
         return
     for row in rows:
         click.echo(f"\n{row['entry_ref']} ({row['entry_type']}) — {row['title']}")
-        snippet = compact_snippet(row.get("body_text", ""), max_lines=3, max_chars=260)
+        subref = row.get("matched_subref")
+        if subref:
+            click.echo(f"  [matched inside: {subref}]")
+        text = row.get("chunk_text") or row.get("body_text", "")
+        snippet = compact_snippet(text, max_lines=3, max_chars=260, query=query)
         if snippet:
             click.echo(f"  {snippet}")
 

@@ -6,7 +6,11 @@ import numpy as np
 
 from claw_easa.config import get_settings
 from claw_easa.db.sqlite import Database
-from claw_easa.retrieval.chunking import build_list_item_chunks, build_whole_entry_chunk
+from claw_easa.retrieval.chunking import (
+    build_list_item_chunks,
+    build_subheading_chunks,
+    build_whole_entry_chunk,
+)
 from claw_easa.retrieval.embedder import encode_texts
 from claw_easa.retrieval.faiss_store import FAISSStore
 
@@ -41,35 +45,41 @@ class RetrievalIndexer:
 
             chunk_count = 0
             item_chunk_count = 0
+            subheading_chunk_count = 0
             insert_sql = (
                 "INSERT INTO entry_chunks "
                 "(entry_id, chunk_index, chunk_kind, breadcrumbs_text, "
                 " chunk_text, token_estimate) "
                 "VALUES (?, ?, ?, ?, ?, ?)"
             )
+
+            def _insert(cur, chunk: dict) -> None:
+                cur.execute(insert_sql, (
+                    chunk["entry_id"], chunk["chunk_index"],
+                    chunk["chunk_kind"], chunk["breadcrumbs_text"],
+                    chunk["chunk_text"], chunk["token_estimate"],
+                ))
+
             with conn.cursor() as cur:
                 for entry in entries:
-                    whole = build_whole_entry_chunk(entry)
-                    cur.execute(insert_sql, (
-                        whole["entry_id"], whole["chunk_index"],
-                        whole["chunk_kind"], whole["breadcrumbs_text"],
-                        whole["chunk_text"], whole["token_estimate"],
-                    ))
+                    _insert(cur, build_whole_entry_chunk(entry))
                     chunk_count += 1
 
                     for item in build_list_item_chunks(entry):
-                        cur.execute(insert_sql, (
-                            item["entry_id"], item["chunk_index"],
-                            item["chunk_kind"], item["breadcrumbs_text"],
-                            item["chunk_text"], item["token_estimate"],
-                        ))
+                        _insert(cur, item)
                         chunk_count += 1
                         item_chunk_count += 1
+
+                    for sub in build_subheading_chunks(entry):
+                        _insert(cur, sub)
+                        chunk_count += 1
+                        subheading_chunk_count += 1
             conn.commit()
 
         log.info(
-            "Built %d chunks from %d entries (%d list-item sub-chunks)",
-            chunk_count, len(entries), item_chunk_count,
+            "Built %d chunks from %d entries "
+            "(%d list-item, %d subheading sub-chunks)",
+            chunk_count, len(entries), item_chunk_count, subheading_chunk_count,
         )
         return chunk_count
 
