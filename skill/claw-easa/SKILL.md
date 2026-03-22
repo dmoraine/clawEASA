@@ -30,6 +30,7 @@ Answering rules:
 
 Read these files only when needed:
 - `references/usage.md` for repository-aware usage and installation notes
+- `references/runtime-setup.md` when the local `claw-easa` CLI may not be installed yet
 - `references/easa-answering.md` for answer format and evidence rules
 
 Local install notes:

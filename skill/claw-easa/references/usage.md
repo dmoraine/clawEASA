@@ -52,6 +52,9 @@ requests is applied by default to avoid rate-limiting (configurable with `--dela
 
 ## Installing the skill locally for OpenClaw
 
+Important: install the Python runtime first. The skill package alone does not provide the `claw-easa` CLI.
+See `references/runtime-setup.md` when the runtime may not be present yet.
+
 Copy the packaged skill directory into the OpenClaw workspace:
 
 ```bash

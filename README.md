@@ -108,8 +108,21 @@ This repository is a normal Python project **and** contains an OpenClaw skill pa
 - Development source of truth: repository root
 - Installable AgentSkill package: `skill/claw-easa/`
 - Local installation is guarded against symlink/destination paths that resolve back into the source repository
+- Installing the skill package alone is **not enough**; the Python runtime and CLI must also be installed
 
-To install locally into OpenClaw:
+### Recommended GitHub → OpenClaw install flow
+
+The bootstrap installs a **CPU-only** torch build by default, which is safer for typical OpenClaw hosts and avoids accidentally downloading large CUDA wheels.
+
+```bash
+git clone https://github.com/dmoraine/clawEASA.git
+cd clawEASA
+./scripts/bootstrap-local-runtime.sh
+./scripts/install-openclaw-skill.sh
+./scripts/check-openclaw-runtime.sh
+```
+
+### Install only the skill package into OpenClaw
 
 ```bash
 ./scripts/install-openclaw-skill.sh
@@ -128,9 +141,12 @@ mkdir -p ~/.openclaw/workspace/skills/claw-easa
 rsync -a --delete skill/claw-easa/ ~/.openclaw/workspace/skills/claw-easa/
 ```
 
+See also: `docs/openclaw-install.md`
+
 ## Running tests
 
 ```bash
-pip install -e ".[dev]"
+./scripts/bootstrap-local-runtime.sh
+. .venv/bin/activate
 pytest
 ```
