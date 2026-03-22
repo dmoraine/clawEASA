@@ -28,45 +28,106 @@ def init_cmd() -> None:
     db.close()
 
 
+def _fmt_size(nbytes: int) -> str:
+    if nbytes >= 1_073_741_824:
+        return f"{nbytes / 1_073_741_824:.1f} GB"
+    if nbytes >= 1_048_576:
+        return f"{nbytes / 1_048_576:.1f} MB"
+    if nbytes >= 1024:
+        return f"{nbytes / 1024:.1f} KB"
+    return f"{nbytes} B"
+
+
 @main.command("status")
 def status_cmd() -> None:
-    """Show project status."""
+    """Show project status and corpus statistics."""
+    import os
     from claw_easa.config import get_settings
 
     settings = get_settings()
-    click.echo(f"Data dir:      {settings.data_dir}")
-    click.echo(f"Database:      {settings.db_path}")
-    click.echo(f"FAISS index:   {settings.faiss_index_path}")
 
-    if settings.db_path.exists():
-        import os
+    click.echo("=== clawEASA status ===\n")
 
-        size = os.path.getsize(settings.db_path)
-        click.echo(f"DB size:       {size:,} bytes")
+    db_exists = settings.db_path.exists()
+    faiss_exists = settings.faiss_index_path.exists()
 
-        db = Database()
-        db.open()
-        try:
-            row = db.fetch_one("SELECT COUNT(*) AS cnt FROM source_documents")
-            click.echo(f"Documents:     {row['cnt']}")
-            row = db.fetch_one("SELECT COUNT(*) AS cnt FROM regulation_entries")
-            click.echo(f"Entries:       {row['cnt']}")
-            row = db.fetch_one("SELECT COUNT(*) AS cnt FROM entry_chunks")
-            click.echo(f"Chunks:        {row['cnt']}")
-        except Exception:
-            click.echo("(schema not initialised)")
-        finally:
-            db.close()
+    db_size = _fmt_size(os.path.getsize(settings.db_path)) if db_exists else "n/a"
+    faiss_size = _fmt_size(os.path.getsize(settings.faiss_index_path)) if faiss_exists else "n/a"
+
+    click.echo(f"Database:        {settings.db_path} ({db_size})")
+    if faiss_exists:
+        click.echo(f"FAISS index:     {settings.faiss_index_path} ({faiss_size})")
     else:
-        click.echo("(database not created — run 'claw-easa init')")
+        click.echo("FAISS index:     not built — run 'claw-easa index build'")
 
-    if settings.faiss_index_path.exists():
-        import os
+    if not db_exists:
+        click.echo("\n(database not created — run 'claw-easa init')")
+        return
 
-        size = os.path.getsize(settings.faiss_index_path)
-        click.echo(f"FAISS size:    {size:,} bytes")
-    else:
-        click.echo("(FAISS index not built — run 'claw-easa index build')")
+    db = Database()
+    db.open()
+    try:
+        _status_corpus(db)
+    except Exception:
+        click.echo("\n(schema not initialised)")
+    finally:
+        db.close()
+
+
+def _status_corpus(db: Database) -> None:
+    with db.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT sd.id, sd.slug, sd.source_family, sd.status, sd.title, "
+                "       COUNT(re.id) AS entry_count "
+                "FROM source_documents sd "
+                "LEFT JOIN regulation_parts rp ON rp.document_id = sd.id "
+                "LEFT JOIN regulation_subparts rs ON rs.part_id = rp.id "
+                "LEFT JOIN regulation_sections rsec ON rsec.subpart_id = rs.id "
+                "LEFT JOIN regulation_entries re ON re.section_id = rsec.id "
+                "GROUP BY sd.id ORDER BY sd.source_family, sd.slug"
+            )
+            docs = cur.fetchall()
+
+            cur.execute(
+                "SELECT entry_type, COUNT(*) AS cnt "
+                "FROM regulation_entries GROUP BY entry_type ORDER BY cnt DESC"
+            )
+            type_counts = cur.fetchall()
+
+            cur.execute(
+                "SELECT chunk_kind, COUNT(*) AS cnt "
+                "FROM entry_chunks GROUP BY chunk_kind"
+            )
+            chunk_counts = {r["chunk_kind"]: r["cnt"] for r in cur.fetchall()}
+
+            total_chunks = sum(chunk_counts.values())
+
+    ears = [d for d in docs if d["source_family"] != "faq"]
+    faqs = [d for d in docs if d["source_family"] == "faq"]
+
+    if ears:
+        click.echo(f"\nEasy Access Rules ({len(ears)}):")
+        for doc in ears:
+            cnt = doc["entry_count"]
+            info = f"{cnt} entries" if cnt else doc["status"]
+            click.echo(f"  {doc['slug']:<35} {info:<15} {doc['title']}")
+
+    if faqs:
+        faq_with_content = sum(1 for d in faqs if d["entry_count"] > 0)
+        total_faqs = sum(d["entry_count"] for d in faqs)
+        click.echo(f"\nFAQ domains:         {faq_with_content} domains, {total_faqs} FAQs")
+
+    if type_counts:
+        click.echo("\nEntries by type:")
+        parts = [f"{r['entry_type']:<6} {r['cnt']:>5}" for r in type_counts]
+        for i in range(0, len(parts), 3):
+            click.echo("  " + "    ".join(parts[i:i + 3]))
+
+    if total_chunks:
+        whole = chunk_counts.get("whole", 0)
+        items = chunk_counts.get("list_item", 0)
+        click.echo(f"\nIndex:               {total_chunks} chunks ({whole} whole + {items} list-item)")
 
 
 # --- DB commands ---
