@@ -71,6 +71,10 @@ claw-easa sources-list --type faq   # only FAQs
 claw-easa lookup ORO.FTL.110
 claw-easa refs "split duty"
 claw-easa ask "What are the FTL operator responsibilities?"
+
+# Source-scoped search (restrict to a specific source)
+claw-easa refs "crew fatigue" --slug occurrence-reporting
+claw-easa snippets "crew fatigue" --slug occurrence-reporting
 ```
 
 ## Configuration
