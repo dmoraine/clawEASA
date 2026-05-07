@@ -45,6 +45,8 @@ SLUG_ALIASES: list[SourceAlias] = [
     SourceAlias("aerodromes", ("aerodromes",)),
     SourceAlias("atm-ans", ("air-traffic-managementair-navigation-services",)),
     SourceAlias("sera", ("standardised-european-rules",)),
+    SourceAlias("cs-gen-mmel", ("generic-master-minimum-equipment-list-ear-cs",)),
+    SourceAlias("cs-mmel", ("master-minimum-equipment-list-ear-cs-mmel",)),
     SourceAlias("occurrence-reporting", ("occurrence-reporting",), source_family="rulebook"),
 ]
 

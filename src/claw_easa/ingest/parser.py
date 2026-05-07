@@ -95,6 +95,8 @@ class EASAOfficeXMLParser:
     Supports three parsing modes:
     - ``part``: documents organised by ANNEX / Part-XXX (e.g. air-ops annexes)
     - ``article-structured``: documents organised by Articles (e.g. basic-regulation)
+    - ``cs-structured``: certification specification EARs organised by CS headings
+      rather than ANNEX / Part-XXX headings (e.g. CS-MMEL, CS-GEN-MMEL)
     - ``hybrid``: documents with both cover-regulation articles *and* Part annexes
     """
 
@@ -168,6 +170,16 @@ class EASAOfficeXMLParser:
         r'^((?:GM|AMC)\d+\s+Annex\s+I\b.*)',
         re.IGNORECASE,
     )
+    CS_ENTRY_STYLES = frozenset((
+        'Heading2CS', 'Heading2GM',
+        'Heading3CS', 'Heading3GM',
+        'Heading4CS', 'Heading4GM',
+        'Heading5CS', 'Heading5GM',
+    ))
+    CS_ENTRY_PATTERN = re.compile(
+        r'^(CS\s+[A-Z][A-Z0-9]*(?:\.[A-Z0-9-]+)+)\b\s*(.*)',
+        re.IGNORECASE,
+    )
 
     # ── Public API ──────────────────────────────────────────────────────
 
@@ -178,6 +190,9 @@ class EASAOfficeXMLParser:
         if self._looks_like_article_structured(paragraphs, title):
             parts = self._parse_article_structured(paragraphs)
             parser_mode = 'article-structured'
+        elif self._looks_like_cs_structured(paragraphs):
+            parts = self._parse_cs_structured(paragraphs, title)
+            parser_mode = 'cs-structured'
         else:
             annex_parts = self._parse_parts(paragraphs)
             if self._has_cover_regulation(paragraphs):
@@ -263,6 +278,24 @@ class EASAOfficeXMLParser:
             if p.level >= 2 and self.BASIC_ARTICLE_PATTERN.match(p.text)
         )
         return article_hits >= 3
+
+    def _looks_like_cs_structured(self, paragraphs: list[OfficeXMLParagraph]) -> bool:
+        """Detect certification specification EARs without ANNEX / Part headings.
+
+        CS-MMEL and CS-GEN-MMEL are Easy Access Rules, but their XML uses
+        ``Heading2CS`` / ``Heading3GM`` entries directly under top-level
+        headings instead of the ANNEX -> SUBPART -> SECTION hierarchy used by
+        Air Ops and similar rulebooks.
+        """
+        part_hits = sum(
+            1 for p in paragraphs
+            if p.style == 'Heading1' and self.PART_PATTERN.search(p.text)
+        )
+        if part_hits:
+            return False
+
+        cs_hits = sum(1 for p in paragraphs if self._identify_cs_entry(p))
+        return cs_hits >= 3
 
     # ── Cover regulation (hybrid mode) ──────────────────────────────────
 
@@ -531,6 +564,146 @@ class EASAOfficeXMLParser:
             sort_order=sort_order,
             source_locator=f'paragraphs:{start_idx + 1}-{end_idx}',
         )
+
+    # ── Certification-specification structured parsing ──────────────────
+
+    def _parse_cs_structured(
+        self, paragraphs: list[OfficeXMLParagraph], document_title: str,
+    ) -> list[ParsedPart]:
+        first_entry_idx = self._first_cs_entry_idx(paragraphs)
+        if first_entry_idx is None:
+            return []
+
+        subpart_boundaries = self._find_cs_subpart_boundaries(paragraphs, first_entry_idx)
+        if not subpart_boundaries:
+            subpart_boundaries = [(0, 'GENERAL', document_title)]
+
+        source_code = self._derive_cs_document_code(paragraphs, document_title)
+        subparts: list[ParsedSubpart] = []
+        for idx, (sp_start, code, title) in enumerate(subpart_boundaries):
+            sp_end = (
+                subpart_boundaries[idx + 1][0]
+                if idx + 1 < len(subpart_boundaries)
+                else len(paragraphs)
+            )
+            entries = self._collect_cs_entries(paragraphs, sp_start, sp_end)
+            if not entries:
+                continue
+            section = ParsedSection(title=title, sort_order=1, entries=entries)
+            subparts.append(ParsedSubpart(
+                code=code,
+                title=title,
+                sort_order=idx + 1,
+                sections=[section],
+            ))
+
+        if not subparts:
+            return []
+
+        return [ParsedPart(
+            code=source_code,
+            title=document_title,
+            annex='',
+            sort_order=1,
+            subparts=subparts,
+        )]
+
+    def _first_cs_entry_idx(self, paragraphs: list[OfficeXMLParagraph]) -> int | None:
+        for idx, para in enumerate(paragraphs):
+            if self._identify_cs_entry(para):
+                return idx
+        return None
+
+    def _find_cs_subpart_boundaries(
+        self, paragraphs: list[OfficeXMLParagraph], first_entry_idx: int,
+    ) -> list[tuple[int, str, str]]:
+        boundaries: list[tuple[int, str, str]] = []
+        for idx in range(first_entry_idx, -1, -1):
+            para = paragraphs[idx]
+            if para.style == 'Heading1':
+                text = para.text.strip()
+                if self._heading1_starts_cs_content(text, paragraphs, idx):
+                    boundaries.append((idx, self._cs_subpart_code(text), text))
+                    break
+
+        for idx in range(first_entry_idx + 1, len(paragraphs)):
+            para = paragraphs[idx]
+            if para.style != 'Heading1':
+                continue
+            text = para.text.strip()
+            if self._heading1_starts_cs_content(text, paragraphs, idx):
+                boundaries.append((idx, self._cs_subpart_code(text), text))
+
+        return boundaries
+
+    def _heading1_starts_cs_content(
+        self, text: str, paragraphs: list[OfficeXMLParagraph], idx: int,
+    ) -> bool:
+        text_upper = text.upper()
+        if text_upper.startswith('SUBPART ') or text_upper.startswith('CS AND GM'):
+            return True
+        lookahead = paragraphs[idx + 1:idx + 12]
+        return any(self._identify_cs_entry(p) for p in lookahead)
+
+    def _cs_subpart_code(self, title: str) -> str:
+        match = self.SUBPART_PATTERN.match(title)
+        if match:
+            return f'SUBPART-{match.group(1).upper()}'
+        normalized = re.sub(r'[^A-Z0-9]+', '-', title.upper()).strip('-')
+        return normalized[:40] or 'GENERAL'
+
+    def _derive_cs_document_code(
+        self, paragraphs: list[OfficeXMLParagraph], document_title: str,
+    ) -> str:
+        for para in paragraphs:
+            info = self._identify_cs_entry(para)
+            if info and info['entry_ref'].upper().startswith('CS '):
+                ref = info['entry_ref'][3:].split('.')[0]
+                return f'CS-{ref}'
+        match = re.search(r'CS[-\s]+([A-Z][A-Z0-9-]+)', document_title, re.IGNORECASE)
+        if match:
+            return f"CS-{match.group(1).upper()}"
+        return 'CS'
+
+    def _collect_cs_entries(
+        self, paragraphs: list[OfficeXMLParagraph], start_idx: int, end_idx: int,
+    ) -> list[ParsedEntry]:
+        entry_indices: list[tuple[int, dict[str, str]]] = []
+        for idx in range(start_idx, end_idx):
+            info = self._identify_cs_entry(paragraphs[idx])
+            if info:
+                entry_indices.append((idx, info))
+
+        entries: list[ParsedEntry] = []
+        for order, (start, info) in enumerate(entry_indices):
+            end = entry_indices[order + 1][0] if order + 1 < len(entry_indices) else end_idx
+            entries.append(self._parse_entry(paragraphs, info, order + 1, start, end))
+        return entries
+
+    def _identify_cs_entry(self, para: OfficeXMLParagraph) -> dict[str, str] | None:
+        if para.style in self._TOC_STYLES or para.style not in self.CS_ENTRY_STYLES:
+            return None
+
+        text = para.text.strip()
+        normalized_text = re.sub(r'\s+', ' ', text.replace('\xa0', ' ')).strip()
+        cs_match = self.CS_ENTRY_PATTERN.match(normalized_text)
+        if cs_match:
+            return {'entry_type': 'CS', 'entry_ref': cs_match.group(1), 'title': text}
+
+        gm_match = self.ARTICLE_GM_PATTERN.match(normalized_text)
+        if gm_match:
+            return {'entry_type': 'GM', 'entry_ref': gm_match.group(1), 'title': text}
+
+        amc_match = self.ARTICLE_AMC_PATTERN.match(normalized_text)
+        if amc_match:
+            return {'entry_type': 'AMC', 'entry_ref': amc_match.group(1), 'title': text}
+
+        # Appendices and ATA chapters in CS-MMEL/CS-GEN-MMEL are guidance
+        # material sections, not standalone certification specifications.
+        if normalized_text.upper().startswith(('APPENDIX ', 'ATA ')):
+            return {'entry_type': 'GM', 'entry_ref': normalized_text, 'title': text}
+
+        return None
 
     # ── Article-structured parsing ──────────────────────────────────────
 
