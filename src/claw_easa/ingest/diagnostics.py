@@ -59,7 +59,7 @@ def coverage_report(xml_path: Path, title: str) -> CoverageReport:
                 for entry in sec.entries:
                     total_entries += 1
                     type_counts[entry.entry_type] += 1
-                    body_len = sum(len(l) for l in entry.body_lines)
+                    body_len = sum(len(line) for line in entry.body_lines)
                     total_body_chars += body_len
                     if body_len == 0:
                         empty_body += 1
@@ -87,9 +87,10 @@ def coverage_report(xml_path: Path, title: str) -> CoverageReport:
 
     # --- Uncaptured heading-style paragraphs ---
     entry_heading_styles = {
-        "Heading3IR", "Heading3AMC", "Heading3GM",
-        "Heading4IR", "Heading4AMC", "Heading4GM",
-        "Heading5AMC", "Heading5GM", "Heading5IR",
+        "Heading2CS", "Heading2GM",
+        "Heading3CS", "Heading3IR", "Heading3AMC", "Heading3GM",
+        "Heading4CS", "Heading4IR", "Heading4AMC", "Heading4GM",
+        "Heading5CS", "Heading5AMC", "Heading5GM", "Heading5IR",
     }
     captured_list_positions: set[int] = set()
     for part in doc.parts:
