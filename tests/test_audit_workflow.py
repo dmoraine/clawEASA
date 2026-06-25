@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import csv
 import json
+from copy import deepcopy
 
 from openpyxl import load_workbook
 import pytest
 
 from claw_easa.audit.export import export_report_csv, export_report_json, export_report_xlsx
-from claw_easa.audit.schema import load_report, validate_report
+from claw_easa.audit.schema import AuditSchemaError, load_report, validate_report
 from claw_easa.audit.storage import fetch_finding, fetch_report, import_report, list_reports
 from claw_easa.config import Settings, reset_settings
 from claw_easa.db import Database
@@ -136,6 +137,60 @@ class TestAuditPersistence:
             assert len(reports) == 2
             assert reports[0]["report_id"] == sample_report_v2["report_id"]
             assert reports[0]["finding_count"] == 1
+        finally:
+            db.close()
+
+    def test_reimport_source_without_created_at_is_idempotent(self, audit_settings):
+        # A report that omits ``created_at`` gets a fresh auto-generated
+        # timestamp on every canonicalization. Re-importing the same source
+        # must still be idempotent (regression: it used to raise
+        # "already exists with different content").
+        report = {
+            "schema_version": "1.0",
+            "report_id": "AUD-IDEMPOTENT-0001",
+            "report_name": "Idempotency check",
+            "manual_name": "OM-A",
+            "manual_version_date": "Rev. 12 / 2026-03-01",
+            "entity_scope": "ASLB",
+            "findings": [
+                {
+                    "finding_id": "AUD-IDEMPOTENT-0101",
+                    "manual_name": "OM-A",
+                    "manual_section_paragraph": "4.2.1",
+                    "manual_version_date": "Rev. 12 / 2026-03-01",
+                    "entity_scope": "ASLB",
+                    "applicable_easa_references": ["ORO.FTL.110(a)"],
+                    "source_hierarchy_notes": ["IR is binding"],
+                    "manual_excerpt": "The company publishes duty rosters in advance.",
+                    "easa_excerpts": ["An operator shall publish duty rosters."],
+                    "assessment": "Covers the obligation.",
+                    "compliance_score": 4,
+                    "severity": "Low",
+                    "confidence": "High",
+                    "gap_types": ["editorial"],
+                    "recommendation": "Specify the lead time.",
+                    "review_status": "Proposed",
+                }
+            ],
+        }
+        assert "created_at" not in report
+
+        db = Database(settings=audit_settings)
+        db.open()
+        try:
+            import_report(db, report, source_path="/tmp/report.json")
+            # Same source again — no error, no spurious second revision.
+            import_report(db, report, source_path="/tmp/report.json")
+
+            finding = fetch_finding(db, "AUD-IDEMPOTENT-0101")
+            assert finding["latest_revision_number"] == 1
+            assert len(finding["revisions"]) == 1
+
+            # A genuine content change under the same report_id still raises.
+            conflicting = deepcopy(report)
+            conflicting["findings"][0]["compliance_score"] = 1
+            with pytest.raises(AuditSchemaError):
+                import_report(db, conflicting, source_path="/tmp/report.json")
         finally:
             db.close()
 

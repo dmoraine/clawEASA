@@ -16,6 +16,18 @@ def _json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
+def _comparable_content(report: dict[str, Any]) -> str:
+    """Serialize a report for content equality, ignoring ``created_at``.
+
+    ``created_at`` is auto-generated at canonicalization time when absent
+    from the source, so it is non-deterministic across imports.  Including
+    it here would make re-importing an identical source report fail the
+    idempotency check with a misleading "different content" error.
+    """
+    payload = {k: v for k, v in report.items() if k != "created_at"}
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
 def _revision_fingerprint(report: dict[str, Any], finding: dict[str, Any]) -> str:
     payload = {
         "finding_id": finding["finding_id"],
@@ -166,7 +178,8 @@ def import_report(db: Database, report: dict[str, Any], source_path: str | None 
             )
             existing = cur.fetchone()
             if existing:
-                if existing["report_json"] != json.dumps(canonical, ensure_ascii=False):
+                stored = json.loads(existing["report_json"])
+                if _comparable_content(stored) != _comparable_content(canonical):
                     raise AuditSchemaError(
                         f"Audit report already exists with different content: {canonical['report_id']}"
                     )
