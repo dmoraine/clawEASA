@@ -64,17 +64,24 @@ def _resolve_source(slug: str, *, url: str | None = None) -> SourceSpec:
     )
 
 
-def fetch_source(slug: str, *, url: str | None = None) -> dict:
+def fetch_source(slug: str, *, url: str | None = None, use_browser: bool = False) -> dict:
     """Fetch an EASA source document.
 
     The page URL is resolved dynamically from the EASA catalog unless
-    *url* is given explicitly.
+    *url* is given explicitly.  When *use_browser* is true, a headless
+    browser backend is used to get past EASA's JavaScript bot-challenge
+    (requires the optional ``playwright`` dependency).
     """
-    from claw_easa.ingest.scraper import EASASourceFetcher
-
     source = _resolve_source(slug, url=url)
     settings = get_settings()
     data_dir = Path(settings.data_dir)
+
+    if use_browser:
+        from claw_easa.ingest.scraper_browser import BrowserSourceFetcher
+        fetcher = BrowserSourceFetcher()
+    else:
+        from claw_easa.ingest.scraper import EASASourceFetcher
+        fetcher = EASASourceFetcher()
 
     db = _open_db()
     try:
@@ -88,7 +95,6 @@ def fetch_source(slug: str, *, url: str | None = None) -> dict:
             source_url=source.source_url,
         )
 
-        fetcher = EASASourceFetcher()
         downloaded = fetcher.fetch(source, data_dir)
 
         file_id = record_download(

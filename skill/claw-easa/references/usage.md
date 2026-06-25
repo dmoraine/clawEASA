@@ -21,6 +21,7 @@ python -m claw_easa.cli sources-list --type faq   # only FAQ domains
 python -m claw_easa.cli ear-discover              # list EARs available on EASA website
 python -m claw_easa.cli ear-list                  # list built-in source aliases
 python -m claw_easa.cli ingest fetch air-ops      # download ZIP archive
+python -m claw_easa.cli ingest fetch air-ops --browser  # download via headless browser (bypass bot-challenge)
 python -m claw_easa.cli ingest parse air-ops      # extract XML + parse
 python -m claw_easa.cli ingest parse air-ops --file ~/Downloads/air-ops.zip  # ingest a manual download
 python -m claw_easa.cli ingest diagnose air-ops   # verify coverage vs source XML
@@ -69,18 +70,52 @@ and `ingest parse` extracts the XML before parsing it into the regulatory hierar
 
 ### When the automatic fetcher is blocked
 
-The EASA website is fronted by a JavaScript bot-challenge (Fastly "Client
-Challenge"), so `ingest fetch` cannot download files programmatically — it
-will fail with a clear message rather than save the challenge page. In that
-case, download the ZIP (or XML) by hand from the EASA document library and
-ingest it directly:
+The EASA website is fronted by a Fastly JavaScript bot-challenge (cookies
+`_fs_ch_*`), so the plain HTTP `ingest fetch` cannot download files — a
+`requests`-style client cannot execute the challenge script, whatever the
+User-Agent. The fetcher detects the challenge page and fails with a clear
+message rather than saving it. There are three ways around it, in order of
+preference.
+
+**1. Browser download + `parse --file` (recommended — works for agents and humans)**
+
+A real browser executes the challenge natively. An agent driving a browser
+(or you, by hand) opens the document-library page, clicks the **XML**
+download link, saves the file, then ingests it locally:
 
 ```bash
+# After downloading EAR-for-Air-Operations.zip via a browser:
 python -m claw_easa.cli ingest parse air-ops --file ~/Downloads/EAR-for-Air-Operations.zip
 ```
 
 The file is copied into the managed downloads directory, recorded as the
-latest source file, and parsed — no network access required.
+latest source file, and parsed — no network access required at parse time.
+Find the page for a slug with `claw-easa ear-discover` (or browse
+`https://www.easa.europa.eu/en/document-library/easy-access-rules`).
+
+**2. Headless browser backend (`fetch --browser`, fully automated)**
+
+Installs an opt-in Playwright backend that launches headless Chromium,
+clears the challenge, and downloads the current file automatically:
+
+```bash
+pip install 'claw-easa[browser]'
+playwright install chromium
+python -m claw_easa.cli ingest fetch air-ops --browser
+python -m claw_easa.cli ingest parse air-ops
+```
+
+This always fetches the latest revision without a human in the loop. Caveat:
+aggressive bot-management can occasionally fingerprint headless browsers, so
+it is best-effort; fall back to option 1 if a run is challenged.
+
+**3. EUR-Lex for the underlying regulation only (not the EAR)**
+
+The raw legal act behind a rule (e.g. Air-OPS = Regulation (EU) No 965/2012,
+CELEX `32012R0965`) is on EUR-Lex with no bot-challenge, but it is the
+Implementing Rule **only** — it does not include EASA's consolidated AMC/GM
+or the Easy Access Rules structure this parser expects. Use it as a
+reference for the IR text, not as a drop-in EAR source.
 
 ## FAQ ingestion
 

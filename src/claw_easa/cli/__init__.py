@@ -184,16 +184,24 @@ def ingest_group() -> None:
 @ingest_group.command("fetch")
 @click.argument("slug")
 @click.option("--url", default=None, help="Explicit download URL (skips catalog resolution)")
-def ingest_fetch_cmd(slug: str, url: str | None) -> None:
+@click.option(
+    "--browser",
+    is_flag=True,
+    default=False,
+    help="Use a headless browser to bypass EASA's bot-challenge "
+         "(needs the optional 'playwright' dependency).",
+)
+def ingest_fetch_cmd(slug: str, url: str | None, browser: bool) -> None:
     """Fetch a source document by slug.
 
     The download URL is resolved dynamically from the EASA catalog.
     Use --url to bypass catalog resolution and provide a direct link.
+    Use --browser when EASA's bot-challenge blocks the plain HTTP fetch.
     """
     from claw_easa.ingest.service import fetch_source
 
     try:
-        result = fetch_source(slug, url=url)
+        result = fetch_source(slug, url=url, use_browser=browser)
     except RuntimeError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(
