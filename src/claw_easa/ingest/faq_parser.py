@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass, field
 from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 
 log = logging.getLogger(__name__)
 

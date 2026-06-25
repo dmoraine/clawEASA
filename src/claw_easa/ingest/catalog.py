@@ -6,7 +6,6 @@ import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-import requests
 from bs4 import BeautifulSoup
 
 log = logging.getLogger(__name__)

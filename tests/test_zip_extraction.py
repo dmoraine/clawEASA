@@ -1,7 +1,6 @@
 """Tests for ZIP archive extraction in the ingestion pipeline."""
 
 import zipfile
-from pathlib import Path
 
 import pytest
 

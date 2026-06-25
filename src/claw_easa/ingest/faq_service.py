@@ -13,7 +13,7 @@ import time
 
 from claw_easa.db import Database
 from claw_easa.db.migrations import MigrationRunner
-from claw_easa.ingest.faq_parser import parse_faq_root_page, parse_faq_page, FAQDomainLink
+from claw_easa.ingest.faq_parser import parse_faq_root_page, parse_faq_page
 from claw_easa.ingest.faq_sources import REGULATIONS_FAQ_ROOT_URL, FAQDomain, make_faq_domain
 from claw_easa.ingest.repository import (
     link_faq_ref,
