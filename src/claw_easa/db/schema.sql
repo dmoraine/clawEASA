@@ -139,6 +139,69 @@ BEGIN
     VALUES (new.id, new.entry_ref, new.title, new.body_text);
 END;
 
+-- Audit workflow storage (canonical JSON + local persistence)
+CREATE TABLE IF NOT EXISTS audit_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_id TEXT NOT NULL UNIQUE,
+    report_name TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    manual_name TEXT NOT NULL,
+    manual_version_date TEXT NOT NULL,
+    entity_scope TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    source_path TEXT,
+    report_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_findings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_db_id INTEGER NOT NULL REFERENCES audit_reports(id) ON DELETE CASCADE,
+    finding_index INTEGER NOT NULL,
+    finding_id TEXT NOT NULL,
+    finding_json TEXT NOT NULL,
+    UNIQUE(report_db_id, finding_index),
+    UNIQUE(report_db_id, finding_id)
+);
+
+CREATE TABLE IF NOT EXISTS audit_finding_revisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    finding_id TEXT NOT NULL,
+    report_db_id INTEGER NOT NULL REFERENCES audit_reports(id) ON DELETE CASCADE,
+    revision_number INTEGER NOT NULL,
+    revision_fingerprint TEXT NOT NULL,
+    manual_name TEXT NOT NULL,
+    manual_section_paragraph TEXT NOT NULL,
+    manual_version_date TEXT NOT NULL,
+    entity_scope TEXT NOT NULL,
+    applicable_easa_references_json TEXT NOT NULL,
+    source_hierarchy_notes_json TEXT NOT NULL,
+    manual_excerpt TEXT NOT NULL,
+    easa_excerpts_json TEXT NOT NULL,
+    assessment TEXT NOT NULL,
+    compliance_score INTEGER NOT NULL,
+    severity TEXT NOT NULL,
+    confidence TEXT NOT NULL,
+    gap_types_json TEXT NOT NULL,
+    recommendation TEXT NOT NULL,
+    review_status TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(finding_id, revision_number),
+    UNIQUE(finding_id, revision_fingerprint)
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_finding_revisions_finding_id
+    ON audit_finding_revisions(finding_id);
+
+CREATE TABLE IF NOT EXISTS audit_finding_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    revision_db_id INTEGER NOT NULL REFERENCES audit_finding_revisions(id) ON DELETE CASCADE,
+    evidence_index INTEGER NOT NULL,
+    evidence_kind TEXT NOT NULL CHECK(evidence_kind IN ('manual', 'easa')),
+    evidence_text TEXT NOT NULL,
+    reference_text TEXT,
+    UNIQUE(revision_db_id, evidence_kind, evidence_index)
+);
+
 -- Schema migrations tracking
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version TEXT PRIMARY KEY,

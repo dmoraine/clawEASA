@@ -342,6 +342,101 @@ def index_rebuild_cmd() -> None:
     )
 
 
+# --- Audit commands ---
+
+
+@main.group("audit")
+def audit_group() -> None:
+    """Audit workflow commands."""
+    pass
+
+
+@audit_group.command("validate")
+@click.argument("path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+def audit_validate_cmd(path: Path) -> None:
+    """Validate a canonical audit JSON report."""
+    from claw_easa.audit.tools import validate_report_file
+
+    report = validate_report_file(path)
+    click.echo(f"OK: report_id={report['report_id']} findings={len(report['findings'])}")
+
+
+@audit_group.command("import")
+@click.argument("path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+def audit_import_cmd(path: Path) -> None:
+    """Import a canonical audit JSON report into the local SQLite store."""
+    from claw_easa.audit.tools import import_report_file
+
+    report = import_report_file(path)
+    click.echo(f"Imported {report['report_id']}: {len(report['findings'])} findings")
+
+
+@audit_group.command("export")
+@click.option("--report-id", required=True, help="Audit report identifier")
+@click.option("--format", "fmt", default="json", type=click.Choice(["json", "csv", "xlsx"]),
+              show_default=True)
+@click.option("--output", type=click.Path(dir_okay=False, path_type=Path), required=True)
+def audit_export_cmd(report_id: str, fmt: str, output: Path) -> None:
+    """Export a stored audit report to JSON, CSV, or XLSX."""
+    from claw_easa.audit.tools import export_report_by_id
+
+    path = export_report_by_id(report_id, output, fmt)
+    click.echo(f"Exported {report_id} to {path}")
+
+
+@audit_group.group("finding")
+def audit_finding_group() -> None:
+    """Inspect and revisit findings by Finding ID."""
+    pass
+
+
+@audit_finding_group.command("get")
+@click.argument("finding_id")
+def audit_finding_get_cmd(finding_id: str) -> None:
+    """Show the latest revision for a finding."""
+    from claw_easa.audit.tools import fetch_finding_by_id
+
+    finding = fetch_finding_by_id(finding_id)
+    latest = finding["latest_revision"]
+    click.echo(f"Finding ID: {finding['finding_id']}")
+    click.echo(f"Latest revision: {finding['latest_revision_number']}")
+    click.echo(f"Manual: {latest['manual_name']} | {latest['manual_version_date']}")
+    click.echo(f"Section: {latest['manual_section_paragraph']}")
+    click.echo(f"Scope: {latest['entity_scope']}")
+    click.echo(
+        f"Score: {latest['compliance_score']} | Severity: {latest['severity']} | "
+        f"Confidence: {latest['confidence']}"
+    )
+    click.echo(f"Status: {latest['review_status']}")
+    click.echo(f"Assessment: {latest['assessment']}")
+    click.echo(f"Recommendation: {latest['recommendation']}")
+    if latest.get("applicable_easa_references"):
+        click.echo("References:")
+        for ref in latest["applicable_easa_references"]:
+            click.echo(f"  - {ref}")
+    if latest.get("evidence"):
+        click.echo("Evidence:")
+        for item in latest["evidence"]:
+            click.echo(
+                f"  [{item['evidence_kind']} #{item['evidence_index']}] {item['evidence_text']}"
+            )
+
+
+@audit_finding_group.command("history")
+@click.argument("finding_id")
+def audit_finding_history_cmd(finding_id: str) -> None:
+    """Show the revision history for a finding."""
+    from claw_easa.audit.tools import list_finding_history
+
+    revisions = list_finding_history(finding_id)
+    click.echo(f"Finding ID: {finding_id}")
+    for revision in revisions:
+        click.echo(
+            f"  Rev {revision['revision_number']}: score={revision['compliance_score']} "
+            f"status={revision['review_status']} manual={revision['manual_version_date']}"
+        )
+
+
 # --- Query commands ---
 
 
@@ -501,7 +596,6 @@ def ear_discover_cmd(refresh: bool) -> None:
     'ingest fetch'.
     """
     from claw_easa.ingest.catalog import EasyAccessRulesCatalogScraper
-    from claw_easa.ingest.sources import get_alias
 
     click.echo("Scanning EASA website for Easy Access Rules...")
     try:

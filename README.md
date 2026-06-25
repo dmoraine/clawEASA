@@ -147,6 +147,28 @@ rsync -a --delete skill/claw-easa/ ~/.openclaw/workspace/skills/claw-easa/
 
 See also: `docs/openclaw-install.md`
 
+## Audit output workflow
+
+The audit workflow uses a canonical JSON report as the source of truth, stores it locally in SQLite, and exports it to CSV or XLSX when needed.
+
+See also:
+- `docs/audit-finding-versioning-plan.md` for the next-step design of finding versioning, lookup by ID, and discussion tracking.
+- `claw-easa audit finding get <FINDING_ID>` to inspect the latest stored revision for a finding.
+- `claw-easa audit finding history <FINDING_ID>` to inspect the revision history.
+
+```bash
+# Validate a canonical JSON report
+claw-easa audit validate path/to/report.json
+
+# Import the report into the local SQLite store
+claw-easa audit import path/to/report.json
+
+# Export a stored report
+claw-easa audit export --report-id AUD-20260422-0001 --format xlsx --output output/report.xlsx
+claw-easa audit export --report-id AUD-20260422-0001 --format csv --output output/report.csv
+claw-easa audit export --report-id AUD-20260422-0001 --format json --output output/report.json
+```
+
 ## Running tests
 
 ```bash
