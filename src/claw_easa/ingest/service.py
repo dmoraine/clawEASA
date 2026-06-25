@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import logging
+import shutil
 from pathlib import Path
 import zipfile
 
@@ -145,7 +147,74 @@ def _materialize_parse_path(path: Path) -> Path:
         return out_path
 
 
-def parse_source(slug: str) -> dict:
+def import_local_source(slug: str, file_path: str | Path) -> dict:
+    """Register a manually-downloaded file as a source for *slug*.
+
+    Use this when the automatic fetcher is blocked (e.g. by EASA's
+    bot-challenge): download the document by hand from the EASA document
+    library, then point this at the local file.  The file is copied into
+    the managed downloads directory and recorded as the latest source
+    file, ready for ``parse_source``.
+    """
+    src = Path(file_path).expanduser()
+    if not src.is_file():
+        raise FileNotFoundError(f"File not found: {src}")
+
+    settings = get_settings()
+    target_dir = Path(settings.data_dir) / "downloads" / slug
+    target_dir.mkdir(parents=True, exist_ok=True)
+    dest = target_dir / src.name
+
+    db = _open_db()
+    try:
+        existing = get_document_by_slug(db, slug)
+        alias = get_alias(slug)
+        source_family = (
+            existing["source_family"] if existing
+            else alias.source_family if alias else "ear"
+        )
+        title = existing["title"] if existing else slug
+        language = existing["language"] if existing else (
+            alias.language if alias else "en"
+        )
+
+        doc_id = upsert_source_document_from_values(
+            db,
+            slug=slug,
+            source_family=source_family,
+            title=title,
+            language=language,
+        )
+
+        if src.resolve() != dest.resolve():
+            shutil.copy2(src, dest)
+
+        hasher = hashlib.sha256()
+        with open(dest, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                hasher.update(chunk)
+
+        file_id = record_download(
+            db,
+            document_id=doc_id,
+            checksum=hasher.hexdigest(),
+            local_path=str(dest),
+            download_url=f"file://{src.resolve()}",
+        )
+
+        return {
+            "document_id": doc_id,
+            "file_id": file_id,
+            "local_path": str(dest),
+        }
+    finally:
+        db.close()
+
+
+def parse_source(slug: str, *, file: str | Path | None = None) -> dict:
+    if file is not None:
+        import_local_source(slug, file)
+
     db = _open_db()
     try:
         doc = get_document_by_slug(db, slug)

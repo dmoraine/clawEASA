@@ -38,16 +38,72 @@ class EASASourceFetcher:
         log.info("Saving to %s", local_path)
 
         hasher = hashlib.sha256()
+        first_chunk = b""
         with open(local_path, "wb") as f:
             for chunk in resp.iter_content(chunk_size=8192):
+                if not first_chunk:
+                    first_chunk = chunk
                 f.write(chunk)
                 hasher.update(chunk)
+
+        self._reject_non_document(
+            local_path, download_url, resp, first_chunk
+        )
 
         return DownloadedSource(
             checksum=hasher.hexdigest(),
             file_kind="primary",
             local_path=local_path,
             download_url=download_url,
+        )
+
+    @staticmethod
+    def _reject_non_document(
+        local_path: Path,
+        download_url: str,
+        resp: requests.Response,
+        first_chunk: bytes,
+    ) -> None:
+        """Fail loudly when EASA serves an HTML page instead of a document.
+
+        EASA now fronts its downloads with a JavaScript bot-challenge
+        (Fastly ``Client Challenge``).  A plain HTTP client cannot solve
+        it, so the server returns a small HTML page with HTTP 200.  Left
+        unchecked it would be saved as ``<slug>.bin`` and later crash the
+        XML parser with a cryptic ``XMLSyntaxError``.  Detect it here and
+        remove the bogus file so nothing downstream treats it as valid.
+        """
+        content_type = resp.headers.get("content-type", "").lower()
+        head = first_chunk[:512].lstrip()
+        head_lower = head.lower()
+
+        is_html = (
+            "text/html" in content_type
+            or head_lower.startswith(b"<!doctype html")
+            or head_lower.startswith(b"<html")
+        )
+        if not is_html:
+            return
+
+        local_path.unlink(missing_ok=True)
+
+        challenge = (
+            b"client challenge" in head_lower
+            or b"_fs-ch-" in first_chunk
+            or b"challenge" in head_lower
+        )
+        if challenge:
+            raise RuntimeError(
+                f"EASA returned a bot-challenge page instead of a document "
+                f"for {download_url}. The EASA website is now behind a "
+                f"JavaScript anti-bot challenge that this fetcher cannot "
+                f"solve automatically. Download the file manually from the "
+                f"EASA document library and ingest it with "
+                f"'claw-easa ingest parse <slug>' against the local file."
+            )
+        raise RuntimeError(
+            f"Expected a document but EASA served an HTML page "
+            f"(content-type={content_type or 'unknown'}) for {download_url}."
         )
 
     def _filename_from_response(self, resp: requests.Response, slug: str) -> str:

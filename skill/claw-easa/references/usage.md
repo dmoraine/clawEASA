@@ -22,6 +22,7 @@ python -m claw_easa.cli ear-discover              # list EARs available on EASA 
 python -m claw_easa.cli ear-list                  # list built-in source aliases
 python -m claw_easa.cli ingest fetch air-ops      # download ZIP archive
 python -m claw_easa.cli ingest parse air-ops      # extract XML + parse
+python -m claw_easa.cli ingest parse air-ops --file ~/Downloads/air-ops.zip  # ingest a manual download
 python -m claw_easa.cli ingest diagnose air-ops   # verify coverage vs source XML
 
 # Ingest EASA FAQs
@@ -65,6 +66,21 @@ Run `claw-easa sources-list --type ear` to see available slugs.
 EASA distributes Easy Access Rules as ZIP archives containing a flat Office Open XML file.
 The ingestion pipeline handles extraction automatically: `ingest fetch` downloads the archive,
 and `ingest parse` extracts the XML before parsing it into the regulatory hierarchy.
+
+### When the automatic fetcher is blocked
+
+The EASA website is fronted by a JavaScript bot-challenge (Fastly "Client
+Challenge"), so `ingest fetch` cannot download files programmatically — it
+will fail with a clear message rather than save the challenge page. In that
+case, download the ZIP (or XML) by hand from the EASA document library and
+ingest it directly:
+
+```bash
+python -m claw_easa.cli ingest parse air-ops --file ~/Downloads/EAR-for-Air-Operations.zip
+```
+
+The file is copied into the managed downloads directory, recorded as the
+latest source file, and parsed — no network access required.
 
 ## FAQ ingestion
 

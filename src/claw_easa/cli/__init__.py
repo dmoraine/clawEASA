@@ -192,7 +192,10 @@ def ingest_fetch_cmd(slug: str, url: str | None) -> None:
     """
     from claw_easa.ingest.service import fetch_source
 
-    result = fetch_source(slug, url=url)
+    try:
+        result = fetch_source(slug, url=url)
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo(
         f"Fetched {slug}: document_id={result['document_id']}, "
         f"path={result['local_path']}"
@@ -233,11 +236,23 @@ def ingest_diagnose_cmd(slug: str) -> None:
 
 @ingest_group.command("parse")
 @click.argument("slug")
-def ingest_parse_cmd(slug: str) -> None:
-    """Parse a fetched source document."""
+@click.option(
+    "--file",
+    "file_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=str),
+    default=None,
+    help="Ingest a manually-downloaded local file instead of a fetched one.",
+)
+def ingest_parse_cmd(slug: str, file_path: str | None) -> None:
+    """Parse a fetched source document.
+
+    Use --file to ingest a document you downloaded by hand (e.g. when the
+    automatic fetcher is blocked by EASA's bot-challenge). The file is
+    copied into the managed downloads directory and parsed.
+    """
     from claw_easa.ingest.service import parse_source
 
-    result = parse_source(slug)
+    result = parse_source(slug, file=file_path)
     click.echo(
         f"Parsed {slug}: {result['entries']} entries "
         f"({result['parts']} parts, {result['subparts']} subparts, "
