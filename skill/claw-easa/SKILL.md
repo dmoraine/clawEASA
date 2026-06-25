@@ -24,7 +24,13 @@ Use `claw-easa sources-list` to see available slugs.
 - `claw-easa ear-discover` to list Easy Access Rules available on the EASA website
 - `claw-easa ear-list` to list built-in known source aliases
 - `claw-easa ingest fetch <slug>` to download a source (use `--url` to bypass catalog)
+  - EASA's site is behind a JavaScript bot-challenge, so the plain fetch is
+    blocked and fails with a clear message. Work around it with either
+    `claw-easa ingest fetch <slug> --browser` (headless browser; needs the
+    optional `playwright` dependency) or a manual/agent browser download fed
+    to `claw-easa ingest parse <slug> --file <path>`.
 - `claw-easa ingest parse <slug>` to parse a fetched source into the database
+  (use `--file <path>` to ingest a manually-downloaded ZIP/XML)
 - `claw-easa ingest diagnose <slug>` to verify parser coverage against the source XML
 - `claw-easa ingest faq-all` to ingest all EASA FAQs (crawls every sub-domain)
 - `claw-easa ingest faq <domain>` to ingest FAQs for a specific domain
