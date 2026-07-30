@@ -68,9 +68,9 @@ def fetch_source(slug: str, *, url: str | None = None, use_browser: bool = False
     """Fetch an EASA source document.
 
     The page URL is resolved dynamically from the EASA catalog unless
-    *url* is given explicitly.  When *use_browser* is true, a headless
-    browser backend is used to get past EASA's JavaScript bot-challenge
-    (requires the optional ``playwright`` dependency).
+    *url* is given explicitly.  When *use_browser* is true, the optional
+    headless-browser fallback is used in case EASA conditionally serves its
+    JavaScript bot-challenge (requires ``playwright``).
     """
     source = _resolve_source(slug, url=url)
     settings = get_settings()
@@ -156,11 +156,11 @@ def _materialize_parse_path(path: Path) -> Path:
 def import_local_source(slug: str, file_path: str | Path) -> dict:
     """Register a manually-downloaded file as a source for *slug*.
 
-    Use this when the automatic fetcher is blocked (e.g. by EASA's
-    bot-challenge): download the document by hand from the EASA document
-    library, then point this at the local file.  The file is copied into
-    the managed downloads directory and recorded as the latest source
-    file, ready for ``parse_source``.
+    Use this when the automatic fetcher is unavailable or conditionally
+    challenged: download the document by hand from the EASA document library,
+    then point this at the local file.  The file is copied into the managed
+    downloads directory and recorded as the latest source file, ready for
+    ``parse_source``.
     """
     src = Path(file_path).expanduser()
     if not src.is_file():

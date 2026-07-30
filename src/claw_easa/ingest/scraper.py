@@ -86,12 +86,12 @@ def reject_non_document(
 ) -> None:
     """Fail loudly when EASA serves an HTML page instead of a document.
 
-    EASA fronts its downloads with a JavaScript bot-challenge (Fastly
-    bot management).  A plain HTTP client cannot solve it, so the server
-    returns a small HTML page with HTTP 200.  Left unchecked it would be
-    saved as ``<slug>.bin`` and later crash the XML parser with a cryptic
-    ``XMLSyntaxError``.  Detect it here and remove the bogus file so
-    nothing downstream treats it as valid.  Shared by both fetchers.
+    EASA downloads normally work over plain HTTP, but Fastly bot management
+    has conditionally returned a JavaScript challenge with HTTP 200.  A plain
+    HTTP client cannot solve that response.  Left unchecked it would be saved
+    as ``<slug>.bin`` and later crash the XML parser with a cryptic
+    ``XMLSyntaxError``.  Detect it here and remove the bogus file so nothing
+    downstream treats it as valid.  Shared by both fetchers.
     """
     head = first_chunk[:512].lstrip()
     head_lower = head.lower()

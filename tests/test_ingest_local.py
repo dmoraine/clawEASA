@@ -1,7 +1,7 @@
 """Tests for ingesting manually-downloaded local files.
 
-When the automatic fetcher is blocked (EASA bot-challenge), users can
-download a document by hand and ingest it with ``parse --file``, which
+When the automatic fetcher is unavailable or conditionally challenged, users
+can download a document by hand and ingest it with ``parse --file``, which
 goes through ``import_local_source``.
 """
 from __future__ import annotations

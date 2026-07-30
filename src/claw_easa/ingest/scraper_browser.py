@@ -1,11 +1,11 @@
-"""Headless-browser fetcher for EASA documents.
+"""Optional headless-browser fetcher for EASA documents.
 
-EASA fronts its website with a Fastly JavaScript bot-challenge that a
-plain HTTP client cannot solve.  A real browser engine runs the challenge
-script, obtains the verified cookie, and can then reach the file.  This
-backend uses Playwright and is opt-in (``ingest fetch --browser``) because
-it requires the optional ``playwright`` dependency plus a Chromium install
-(``playwright install chromium``).
+EASA documents normally download over plain HTTP, but Fastly bot management
+may conditionally serve a JavaScript challenge that a plain HTTP client
+cannot solve.  This fallback uses a real browser engine to run the challenge
+and obtain the verified cookie.  It is opt-in (``ingest fetch --browser``)
+because it requires the optional ``playwright`` dependency plus a Chromium
+install (``playwright install chromium``).
 """
 from __future__ import annotations
 

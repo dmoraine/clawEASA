@@ -21,7 +21,7 @@ python -m claw_easa.cli sources-list --type faq   # only FAQ domains
 python -m claw_easa.cli ear-discover              # list EARs available on EASA website
 python -m claw_easa.cli ear-list                  # list built-in source aliases
 python -m claw_easa.cli ingest fetch air-ops      # download ZIP archive
-python -m claw_easa.cli ingest fetch air-ops --browser  # download via headless browser (bypass bot-challenge)
+python -m claw_easa.cli ingest fetch air-ops --browser  # browser fallback if HTTP fetch is challenged
 python -m claw_easa.cli ingest parse air-ops      # extract XML + parse
 python -m claw_easa.cli ingest parse air-ops --file ~/Downloads/air-ops.zip  # ingest a manual download
 python -m claw_easa.cli ingest diagnose air-ops   # verify coverage vs source XML
@@ -68,35 +68,26 @@ EASA distributes Easy Access Rules as ZIP archives containing a flat Office Open
 The ingestion pipeline handles extraction automatically: `ingest fetch` downloads the archive,
 and `ingest parse` extracts the XML before parsing it into the regulatory hierarchy.
 
-### When the automatic fetcher is blocked
+### Download behavior and challenge fallbacks
 
-The EASA website is fronted by a Fastly JavaScript bot-challenge (cookies
-`_fs_ch_*`), so the plain HTTP `ingest fetch` cannot download files — a
-`requests`-style client cannot execute the challenge script, whatever the
-User-Agent. The fetcher detects the challenge page and fails with a clear
-message rather than saving it. There are three ways around it, in order of
-preference.
-
-**1. Browser download + `parse --file` (recommended — works for agents and humans)**
-
-A real browser executes the challenge natively. An agent driving a browser
-(or you, by hand) opens the document-library page, clicks the **XML**
-download link, saves the file, then ingests it locally:
+The normal HTTP path currently works: `ingest fetch` discovers the current
+document page, selects the XML link, and downloads the ZIP directly. Prefer
+this path because it follows the EASA catalog and therefore picks up new
+revisions:
 
 ```bash
-# After downloading EAR-for-Air-Operations.zip via a browser:
-python -m claw_easa.cli ingest parse air-ops --file ~/Downloads/EAR-for-Air-Operations.zip
+python -m claw_easa.cli ingest fetch air-ops
+python -m claw_easa.cli ingest parse air-ops
 ```
 
-The file is copied into the managed downloads directory, recorded as the
-latest source file, and parsed — no network access required at parse time.
-Find the page for a slug with `claw-easa ear-discover` (or browse
-`https://www.easa.europa.eu/en/document-library/easy-access-rules`).
+EASA has previously returned a Fastly JavaScript bot-challenge (`_fs_ch_*`)
+and may still apply it conditionally. The fetcher rejects such an HTML
+response with a clear error instead of saving it as a document. If that
+happens, use either fallback below.
 
-**2. Headless browser backend (`fetch --browser`, fully automated)**
+**1. Headless browser backend (`fetch --browser`)**
 
-Installs an opt-in Playwright backend that launches headless Chromium,
-clears the challenge, and downloads the current file automatically:
+Install the optional Playwright backend to retry through headless Chromium:
 
 ```bash
 pip install 'claw-easa[browser]'
@@ -105,11 +96,24 @@ python -m claw_easa.cli ingest fetch air-ops --browser
 python -m claw_easa.cli ingest parse air-ops
 ```
 
-This always fetches the latest revision without a human in the loop. Caveat:
-aggressive bot-management can occasionally fingerprint headless browsers, so
-it is best-effort; fall back to option 1 if a run is challenged.
+This remains best-effort because bot-management can fingerprint automated
+browsers.
 
-**3. EUR-Lex for the underlying regulation only (not the EAR)**
+**2. Regular browser download + `parse --file`**
+
+Open the document-library page, download the **XML** ZIP, then ingest it
+locally:
+
+```bash
+# After downloading EAR-for-Air-Operations.zip:
+python -m claw_easa.cli ingest parse air-ops --file ~/Downloads/EAR-for-Air-Operations.zip
+```
+
+The file is copied into the managed downloads directory, recorded as the
+latest source file, and parsed without network access. Find its page with
+`claw-easa ear-discover`.
+
+**EUR-Lex is not a drop-in EAR source**
 
 The raw legal act behind a rule (e.g. Air-OPS = Regulation (EU) No 965/2012,
 CELEX `32012R0965`) is on EUR-Lex with no bot-challenge, but it is the

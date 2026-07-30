@@ -47,8 +47,6 @@ claw-easa ear-discover
 claw-easa ear-list
 
 # Ingest a regulation source (downloads ZIP, extracts XML, parses)
-# Note: the plain fetch is blocked by EASA's bot-challenge — see
-# "Downloading sources" below for the --browser and --file workarounds.
 claw-easa ingest fetch air-ops
 claw-easa ingest parse air-ops
 
@@ -79,31 +77,34 @@ claw-easa refs "crew fatigue" --slug occurrence-reporting
 claw-easa snippets "crew fatigue" --slug occurrence-reporting
 ```
 
-## Downloading sources (EASA bot-challenge)
+## Downloading sources
 
-The EASA website is fronted by a Fastly JavaScript bot-challenge (cookies
-`_fs_ch_*`), so the plain HTTP `ingest fetch` **cannot** download files — a
-`requests`-style client cannot execute the challenge script, whatever the
-User-Agent. The fetcher detects the challenge page and fails with a clear
-message rather than saving it. Three workarounds, in order of preference:
-
-**1. Browser download + `parse --file` (recommended — works for agents and humans)**
-
-A real browser solves the challenge. An agent driving a browser (or you, by
-hand) opens the document-library page, clicks the **XML** download link,
-saves the file, then ingests it locally — no network needed at parse time:
+The normal HTTP fetch currently works without browser automation. It discovers
+the current document page from the EASA catalog, selects the XML download, and
+uses the response metadata to save the ZIP under its real filename:
 
 ```bash
-claw-easa ingest parse air-ops --file ~/Downloads/EAR-for-Air-Operations.zip
+claw-easa ingest fetch air-ops
+claw-easa ingest parse air-ops
 ```
 
-Find the page for a slug with `claw-easa ear-discover`, or browse
-<https://www.easa.europa.eu/en/document-library/easy-access-rules>.
+If you already know a direct EASA download URL, `--url` skips catalog
+resolution:
 
-**2. Headless browser backend (`fetch --browser`, fully automated)**
+```bash
+claw-easa ingest fetch air-ops \
+  --url https://www.easa.europa.eu/en/downloads/136682/en
+```
 
-An opt-in Playwright backend launches headless Chromium, clears the
-challenge, and downloads the current file:
+EASA has served a Fastly JavaScript bot-challenge (`_fs_ch_*`) in the past and
+may still do so conditionally by network or client. The fetcher detects an HTML
+challenge response and fails clearly instead of saving it as a ZIP/XML. Use
+one of these fallbacks only when the normal fetch is challenged.
+
+**1. Headless browser backend (`fetch --browser`)**
+
+The opt-in Playwright backend launches headless Chromium and retries the
+download with a real browser engine:
 
 ```bash
 pip install 'claw-easa[browser]'
@@ -112,11 +113,22 @@ claw-easa ingest fetch air-ops --browser
 claw-easa ingest parse air-ops
 ```
 
-Always fetches the latest revision without a human in the loop. Caveat:
-aggressive bot-management can occasionally fingerprint headless browsers, so
-it is best-effort — fall back to option 1 if a run is challenged.
+Headless browsing is best-effort because bot-management can itself fingerprint
+automated browsers.
 
-**3. EUR-Lex for the underlying regulation only (not the EAR)**
+**2. Browser download + `parse --file`**
+
+Download the XML ZIP from the document-library page with a regular browser,
+then ingest it locally:
+
+```bash
+claw-easa ingest parse air-ops --file ~/Downloads/EAR-for-Air-Operations.zip
+```
+
+Find the page for a slug with `claw-easa ear-discover`, or browse
+<https://www.easa.europa.eu/en/document-library/easy-access-rules>.
+
+**EUR-Lex is not a drop-in EAR source**
 
 The raw legal act behind a rule (e.g. Air-OPS = Regulation (EU) No 965/2012,
 CELEX `32012R0965`) is on EUR-Lex with no bot-challenge, but it is the

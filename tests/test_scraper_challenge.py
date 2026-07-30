@@ -1,8 +1,9 @@
 """Tests for the fetcher's bot-challenge / non-document detection.
 
-EASA fronts its downloads with a JavaScript bot-challenge that returns a
-small HTML page with HTTP 200.  The fetcher must reject such responses
-instead of saving them as a document (which later crashes the parser).
+EASA normally serves ZIP downloads directly but has conditionally returned a
+small JavaScript challenge page with HTTP 200.  The fetcher must reject such
+responses instead of saving them as a document (which later crashes the
+parser).
 """
 from __future__ import annotations
 

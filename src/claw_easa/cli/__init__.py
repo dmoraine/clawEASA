@@ -188,7 +188,7 @@ def ingest_group() -> None:
     "--browser",
     is_flag=True,
     default=False,
-    help="Use a headless browser to bypass EASA's bot-challenge "
+    help="Use a headless browser if EASA's HTTP download is challenged "
          "(needs the optional 'playwright' dependency).",
 )
 def ingest_fetch_cmd(slug: str, url: str | None, browser: bool) -> None:
@@ -196,7 +196,8 @@ def ingest_fetch_cmd(slug: str, url: str | None, browser: bool) -> None:
 
     The download URL is resolved dynamically from the EASA catalog.
     Use --url to bypass catalog resolution and provide a direct link.
-    Use --browser when EASA's bot-challenge blocks the plain HTTP fetch.
+    The normal HTTP fetch is preferred. Use --browser as a fallback if EASA
+    conditionally returns its JavaScript bot-challenge.
     """
     from claw_easa.ingest.service import fetch_source
 
@@ -254,9 +255,9 @@ def ingest_diagnose_cmd(slug: str) -> None:
 def ingest_parse_cmd(slug: str, file_path: str | None) -> None:
     """Parse a fetched source document.
 
-    Use --file to ingest a document you downloaded by hand (e.g. when the
-    automatic fetcher is blocked by EASA's bot-challenge). The file is
-    copied into the managed downloads directory and parsed.
+    Use --file to ingest a document you downloaded by hand, for example when
+    EASA conditionally blocks the automatic fetcher. The file is copied into
+    the managed downloads directory and parsed.
     """
     from claw_easa.ingest.service import parse_source
 
