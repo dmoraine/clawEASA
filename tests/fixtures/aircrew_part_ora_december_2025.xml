@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal Easy Access Rules for Aircrew fixture, revision December 2025
+  (Regulation (EU) No 1178/2011), reduced to ANNEX VII (Part-ORA) — the
+  organisation requirements for aircrew.
+
+  Every heading style, every reference spelling and every nesting depth below
+  is taken from the EASA download itself, including the three shapes the
+  parser does not read:
+
+    * Part-ORA numbers its sections in Roman — 'SECTION I – General',
+      'SECTION II – Management' — where Air Ops numbers them in Arabic.
+    * Subpart AeMC and its rules are spelled in mixed case: 'SUBPART AeMC',
+      'ORA.AeMC.115 Application'.
+    * Subpart ATO subdivides its third section into chapters, so the AMC of a
+      chapter rule is stated one heading level deeper than elsewhere:
+      'AMC1 ORA.ATO.300 General' is a Heading6AMC.
+
+  'Heading6OrgManual' and 'Heading7OrgManual' are the sub-headings EASA sets
+  inside the body of a soft-law entry ('DISTANCE LEARNING'); they are body
+  text, not entries, and are kept here so that reading deeper headings cannot
+  start filing them as rules.
+
+  Kept deliberately small: the headings and one body paragraph per entry, in
+  the same WordprocessingML shape the real EASA download uses.
+-->
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+      <w:r><w:t>Easy Access Rules for Aircrew (Regulation (EU) No 1178/2011)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Table of contents</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>ORA.GEN.200 Management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>AMC1 ORA.ATO.300 General</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>ORA.AeMC.115 Application</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX VII (Part-ORA)</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>SUBPART GEN – GENERAL REQUIREMENTS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3"/></w:pPr>
+      <w:r><w:t>SECTION I – General</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4IR"/></w:pPr>
+      <w:r><w:t>ORA.GEN.105 Competent authority</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>For organisations, the competent authority shall be the authority designated by the Member State in which the organisation has its principal place of business.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4IR"/></w:pPr>
+      <w:r><w:t>ORA.GEN.115 Application for an organisation certificate</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The application for an organisation certificate shall be made in a form and manner established by the competent authority.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading5GM"/></w:pPr>
+      <w:r><w:t>GM1 ORA.GEN.130(c) Changes to organisations</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading6OrgManual"/></w:pPr>
+      <w:r><w:t>GENERAL</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>A change of the name of the organisation is a change requiring prior approval by the competent authority.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3"/></w:pPr>
+      <w:r><w:t>SECTION II – Management</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4IR"/></w:pPr>
+      <w:r><w:t>ORA.GEN.200 Management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The organisation shall establish, implement and maintain a management system that includes clearly defined lines of responsibility and accountability throughout the organisation.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading5AMC"/></w:pPr>
+      <w:r><w:t>AMC1 ORA.GEN.200(a)(1);(2);(3);(5) Management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading6OrgManual"/></w:pPr>
+      <w:r><w:t>NON-COMPLEX ORGANISATIONS - GENERAL</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The safety risk management process should be documented in a manner proportionate to the size of the organisation.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading5GM"/></w:pPr>
+      <w:r><w:t>GM1 ORA.GEN.200(a)(1) Management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The safety manager should be the focal point for the development, administration and maintenance of the safety management system.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>SUBPART ATO – APPROVED TRAINING ORGANISATIONS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3"/></w:pPr>
+      <w:r><w:t>SECTION I – General</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4IR"/></w:pPr>
+      <w:r><w:t>ORA.ATO.100 Scope</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>This Subpart establishes the requirements to be met by organisations providing training for pilot licences and associated ratings and certificates.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3"/></w:pPr>
+      <w:r><w:t>SECTION III – Additional requirements for ATOs providing specific types of training</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4"/></w:pPr>
+      <w:r><w:t>Chapter 1 – Distance Learning Course</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading5IR"/></w:pPr>
+      <w:r><w:t>ORA.ATO.300 General</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Theoretical knowledge instruction may be conducted as a distance learning course, subject to the approval of the competent authority.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading6AMC"/></w:pPr>
+      <w:r><w:t>AMC1 ORA.ATO.300 General</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading7OrgManual"/></w:pPr>
+      <w:r><w:t>DISTANCE LEARNING</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The ATO should ensure that a student who follows a distance learning course is supported by a tutor throughout the course.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>SUBPART AeMC – AERO-MEDICAL CENTRES</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3"/></w:pPr>
+      <w:r><w:t>SECTION I – General</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4IR"/></w:pPr>
+      <w:r><w:t>ORA.AeMC.105 Scope</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>This Subpart establishes the requirements to be met by an organisation applying for the issue of a certificate as an aero-medical centre.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading5GM"/></w:pPr>
+      <w:r><w:t>GM1 ORA.AeMC.105 Scope</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>An aero-medical centre may be part of a larger organisation, provided that the aero-medical activity is clearly identified.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4IR"/></w:pPr>
+      <w:r><w:t>ORA.AeMC.115 Application</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Applicants for an AeMC certificate shall demonstrate to the competent authority that the aero-medical centre is a part of an organisation that has legal capacity.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3"/></w:pPr>
+      <w:r><w:t>SECTION II – Management</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4IR"/></w:pPr>
+      <w:r><w:t>ORA.AeMC.200 Management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The AeMC shall establish and maintain a management system that includes the elements set out in ORA.GEN.200.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading5AMC"/></w:pPr>
+      <w:r><w:t>AMC1 ORA.AeMC.200 Management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The management system of the AeMC should cover the confidentiality of aero-medical records held by the centre.</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>
