@@ -134,10 +134,13 @@ class EASAOfficeXMLParser:
     }
 
     # Regulation (EU) No 1321/2014 letters its later annexes — ANNEX Vb
-    # (Part-ML), ANNEX Vc (Part-CAMO), ANNEX Vd (Part-CAO) — and Regulation
-    # (EU) 2023/203 uses a dotted part code, ANNEX I (Part-IS.I.OR).
+    # (Part-ML), ANNEX Vc (Part-CAMO), ANNEX Vd (Part-CAO) — numbers three of
+    # them — ANNEX II (Part-145), ANNEX III (Part-66), ANNEX IV (Part-147) —
+    # and Regulation (EU) 2023/203 uses a dotted part code, ANNEX I
+    # (Part-IS.I.OR).  A part code that must start with a letter drops the
+    # numeric annexes onto whichever part precedes them.
     PART_PATTERN = re.compile(
-        r'ANNEX\s+([IVX]+[a-z]?)\s*\(Part-([A-Z][A-Z0-9.]*)\)',
+        r'ANNEX\s+([IVX]+[a-z]?)\s*\(Part-([A-Z0-9][A-Z0-9.]*)\)',
         re.IGNORECASE,
     )
     SUBPART_PATTERN = re.compile(
@@ -535,13 +538,18 @@ class EASAOfficeXMLParser:
             return None
         text = para.text.strip()
 
+        # Part-M and Part-145 state their soft law un-numbered — 'AMC
+        # M.A.201(e)', 'GM M.A.302(b)' — where Part-CAMO numbers it, 'AMC1
+        # CAMO.A.200'.  Only the numbered form matches ARTICLE_AMC_PATTERN, so
+        # the un-numbered one is read for its reference instead; the style
+        # still decides the type, or guidance would be typed as binding law.
         if 'AMC' in para.style:
-            match = self.ARTICLE_AMC_PATTERN.match(text)
+            match = self.ARTICLE_AMC_PATTERN.match(text) or self.ARTICLE_IR_PATTERN.match(text)
             if match:
                 return {'entry_type': 'AMC', 'entry_ref': match.group(1), 'title': text}
 
         if 'GM' in para.style:
-            match = self.ARTICLE_GM_PATTERN.match(text)
+            match = self.ARTICLE_GM_PATTERN.match(text) or self.ARTICLE_IR_PATTERN.match(text)
             if match:
                 return {'entry_type': 'GM', 'entry_ref': match.group(1), 'title': text}
 

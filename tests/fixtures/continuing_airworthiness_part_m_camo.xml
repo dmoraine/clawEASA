@@ -3,9 +3,14 @@
   Minimal Easy Access Rules for Continuing Airworthiness fixture
   (Regulation (EU) No 1321/2014).
 
-  Reproduces the two annexes that matter for reference attribution:
+  Reproduces the annexes that matter for reference attribution:
     ANNEX I  (Part-M)    - M.A.xxx requirements
-    ANNEX Vc (Part-CAMO) - CAMO.A.xxx requirements
+    ANNEX II (Part-145)  - 145.A.xxx requirements (numeric part code)
+    ANNEX Vc (Part-CAMO) - CAMO.A.xxx requirements (lettered annex)
+
+  Part-M and Part-145 carry EASA's un-numbered soft-law headings
+  ('AMC M.A.201(e)', 'GM M.A.302(b)'); Part-CAMO carries the numbered form
+  ('AMC1 CAMO.A.200').  Both appear in the real rulebook.
 
   Kept deliberately small: only the headings and one body paragraph per
   entry, in the same WordprocessingML shape the real EASA download uses.
@@ -23,6 +28,10 @@
     <w:p>
       <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
       <w:r><w:t>M.A.201 Responsibilities</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>145.A.30 Personnel requirements</w:t></w:r>
     </w:p>
     <w:p>
       <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
@@ -46,6 +55,14 @@
       <w:r><w:t>The owner shall be responsible for the continuing airworthiness of an aircraft and shall ensure that no flight takes place unless the requirements of this Annex are met.</w:t></w:r>
     </w:p>
     <w:p>
+      <w:pPr><w:pStyle w:val="Heading3AMC"/></w:pPr>
+      <w:r><w:t>AMC M.A.201(e) Responsibilities</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The continuing airworthiness management contract should specify the obligations of each party.</w:t></w:r>
+    </w:p>
+    <w:p>
       <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
       <w:r><w:t>M.A.202 Occurrence reporting</w:t></w:r>
     </w:p>
@@ -64,6 +81,39 @@
     <w:p>
       <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
       <w:r><w:t>Maintenance of each aircraft shall be organised in accordance with an aircraft maintenance programme.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3GM"/></w:pPr>
+      <w:r><w:t>GM M.A.302(b) Aircraft maintenance programme</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The maintenance programme may be based on the maintenance review board report where one exists.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX II (Part-145)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>SUBPART A — GENERAL</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>145.A.30 Personnel requirements</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The organisation shall appoint an accountable manager who has corporate authority for ensuring that all maintenance required by the customer can be financed and carried out.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3AMC"/></w:pPr>
+      <w:r><w:t>AMC 145.A.30(e) Personnel requirements</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The organisation should establish a procedure to assess the competence of maintenance personnel.</w:t></w:r>
     </w:p>
 
     <w:p>
