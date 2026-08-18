@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  An Office Open XML document that is well-formed and full of regulation
+  text, but whose paragraph styles match none of the structures the parser
+  knows (no ANNEX/Part- headings, no Articles, no CS entries).
+
+  Stands in for an EASA source whose XML layout changed, or a new rulebook
+  family: the parser must report that it did not understand the document
+  instead of returning an empty-but-successful parse.
+-->
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="EasaDocumentTitle"/></w:pPr>
+      <w:r><w:t>Easy Access Rules for an Unrecognised Domain</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="EasaRuleBlock"/></w:pPr>
+      <w:r><w:t>Rule 1.1 — Applicability</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="EasaRuleBody"/></w:pPr>
+      <w:r><w:t>This Regulation applies to organisations involved in the design, production and maintenance of aircraft.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="EasaRuleBlock"/></w:pPr>
+      <w:r><w:t>Rule 1.2 — Definitions</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="EasaRuleBody"/></w:pPr>
+      <w:r><w:t>For the purposes of this Regulation, the definitions laid down in Regulation (EU) 2018/1139 apply.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="EasaRuleBlock"/></w:pPr>
+      <w:r><w:t>Rule 2.1 — Organisation requirements</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="EasaRuleBody"/></w:pPr>
+      <w:r><w:t>The organisation shall establish and maintain a management system appropriate to the size of the organisation.</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>
