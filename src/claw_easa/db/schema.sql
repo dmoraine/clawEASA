@@ -4,6 +4,8 @@
 PRAGMA foreign_keys = ON;
 
 -- Source document registry
+-- 'incomplete': the source was processed but yielded no usable content, so it
+-- must not be mistaken for a successful parse.
 CREATE TABLE IF NOT EXISTS source_documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     slug TEXT NOT NULL UNIQUE,
@@ -12,8 +14,10 @@ CREATE TABLE IF NOT EXISTS source_documents (
     language TEXT NOT NULL DEFAULT 'en',
     page_url TEXT,
     source_url TEXT,
+    revision TEXT,
     status TEXT NOT NULL DEFAULT 'registered'
-        CHECK(status IN ('registered', 'fetched', 'parsed', 'indexed', 'error')),
+        CHECK(status IN ('registered', 'fetched', 'parsed', 'incomplete',
+                         'indexed', 'error')),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     parsed_at TEXT,
@@ -200,6 +204,50 @@ CREATE TABLE IF NOT EXISTS audit_finding_evidence (
     evidence_text TEXT NOT NULL,
     reference_text TEXT,
     UNIQUE(revision_db_id, evidence_kind, evidence_index)
+);
+
+-- Corpus build manifest / provenance
+--
+-- Every build of the corpus is recorded with the provenance of the sources it
+-- was built from and a qualification status:
+--   qualified  — every expected source present, parsed and current
+--   incomplete — a source is missing or contributed nothing
+--   stale      — everything parsed, but a local revision is superseded
+--   failed     — the build produced no usable corpus at all
+-- Builds are append-only: an incomplete or failed build never displaces the
+-- last qualified one.
+CREATE TABLE IF NOT EXISTS corpus_builds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    build_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL
+        CHECK(status IN ('qualified', 'incomplete', 'stale', 'failed')),
+    tool_version TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    source_count INTEGER NOT NULL DEFAULT 0,
+    entry_count INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    manifest_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_corpus_builds_status
+    ON corpus_builds(status, id);
+
+CREATE TABLE IF NOT EXISTS corpus_build_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    build_db_id INTEGER NOT NULL REFERENCES corpus_builds(id) ON DELETE CASCADE,
+    slug TEXT NOT NULL,
+    source_family TEXT NOT NULL,
+    title TEXT,
+    status TEXT NOT NULL,
+    revision TEXT,
+    catalog_revision TEXT,
+    checksum TEXT,
+    local_path TEXT,
+    download_url TEXT,
+    entry_count INTEGER NOT NULL DEFAULT 0,
+    parsed_at TEXT,
+    UNIQUE(build_db_id, slug)
 );
 
 -- Schema migrations tracking

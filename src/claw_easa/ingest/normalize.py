@@ -170,12 +170,16 @@ class CanonicalPersister:
                                 )
                                 entries_count += 1
 
+                # A parse that produced nothing is not a successful parse:
+                # recording it as 'parsed' hides a document whose structure
+                # the parser did not understand behind a green ingest.
+                status = 'parsed' if entries_count else 'incomplete'
                 cur.execute(
                     "UPDATE source_documents "
-                    "SET status = 'parsed', parsed_at = datetime('now'), "
+                    "SET status = ?, parsed_at = datetime('now'), "
                     "    updated_at = datetime('now') "
                     "WHERE id = ?",
-                    (document_id,),
+                    (status, document_id),
                 )
             conn.commit()
 

@@ -164,8 +164,15 @@ def format_report(r: CoverageReport) -> str:
         for h in r.uncaptured_headings:
             lines.append(f"   {h}")
 
+    if r.entries == 0:
+        lines.append(
+            f"!! NO ENTRIES EXTRACTED from {r.paragraph_count} paragraphs "
+            f"— the document structure was not recognised"
+        )
+
     ok = (
-        r.empty_body == 0
+        r.entries > 0
+        and r.empty_body == 0
         and not r.missing_articles
         and r.heading_coverage_pct >= 99.0
     )

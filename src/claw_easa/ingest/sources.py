@@ -43,6 +43,7 @@ SLUG_ALIASES: list[SourceAlias] = [
     SourceAlias("initial-airworthiness", ("initial-airworthiness",)),
     SourceAlias("continuing-airworthiness", ("continuing-airworthiness",)),
     SourceAlias("aerodromes", ("aerodromes",)),
+    SourceAlias("information-security", ("information-security",)),
     SourceAlias("atm-ans", ("air-traffic-managementair-navigation-services",)),
     SourceAlias("sera", ("standardised-european-rules",)),
     SourceAlias("cs-gen-mmel", ("generic-master-minimum-equipment-list-ear-cs",)),

@@ -19,7 +19,13 @@ from pathlib import Path
 
 from lxml import etree
 
+from claw_easa.references import REFERENCE_CORE, REFERENCE_PREFIX
+
 logger = logging.getLogger(__name__)
+
+#: ``parser_mode`` of a document whose layout none of the parsing modes
+#: recognised.  Distinct from a mode that ran and legitimately found nothing.
+UNRECOGNISED_MODE = 'unrecognised'
 
 # ── Data classes ────────────────────────────────────────────────────────────
 
@@ -127,8 +133,11 @@ class EASAOfficeXMLParser:
         'Heading7OrgManual': 7,
     }
 
+    # Regulation (EU) No 1321/2014 letters its later annexes — ANNEX Vb
+    # (Part-ML), ANNEX Vc (Part-CAMO), ANNEX Vd (Part-CAO) — and Regulation
+    # (EU) 2023/203 uses a dotted part code, ANNEX I (Part-IS.I.OR).
     PART_PATTERN = re.compile(
-        r'ANNEX\s+([IVX]+)\s+\(Part-([A-Z]+)\)',
+        r'ANNEX\s+([IVX]+[a-z]?)\s*\(Part-([A-Z][A-Z0-9.]*)\)',
         re.IGNORECASE,
     )
     SUBPART_PATTERN = re.compile(
@@ -139,8 +148,10 @@ class EASAOfficeXMLParser:
         r'SECTION\s+(\d+)\s*[–-]\s*(.*)',
         re.IGNORECASE,
     )
+    # Single-letter (M.A.201) and numeric (145.A.30, 21.A.139) part codes are
+    # references too, so the reference shape is shared with retrieval.
     ARTICLE_IR_PATTERN = re.compile(
-        r'^((?:[A-Z]{2,}\s+)?[A-Z]{2,}(?:\.[A-Z0-9-]+)+(?:\([^)]*\)(?:;\([^)]*\))*)?)\s*(.*)',
+        f'^({REFERENCE_PREFIX}{REFERENCE_CORE})' + r'\s*(.*)',
     )
     ARTICLE_AMC_PATTERN = re.compile(
         r'^(AMC\d+\s*.+)',
@@ -202,6 +213,16 @@ class EASAOfficeXMLParser:
             else:
                 parts = annex_parts
                 parser_mode = 'part'
+        if not parts:
+            # No mode found any structure: the layout is not one this parser
+            # understands.  Saying 'part' here would report a clean parse of a
+            # document that was never read.
+            logger.warning(
+                "No structure extracted from %s (%d paragraphs) — "
+                "the document layout was not recognised",
+                xml_path.name, len(paragraphs),
+            )
+            parser_mode = UNRECOGNISED_MODE
         return ParsedDocument(
             title=title,
             parts=parts,

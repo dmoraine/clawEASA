@@ -3,6 +3,11 @@ from __future__ import annotations
 import logging
 
 from claw_easa.db.sqlite import Database
+from claw_easa.references import (
+    canonical_reference,
+    like_escape,
+    normalize_reference_text,
+)
 
 log = logging.getLogger(__name__)
 
@@ -15,7 +20,14 @@ def upsert_source_document_from_values(
     language: str = "en",
     page_url: str | None = None,
     source_url: str | None = None,
+    revision: str | None = None,
 ) -> int:
+    """Register or update a source document.
+
+    *revision* is the dated revision EASA published for the ingested copy
+    (e.g. ``'March 2026'``).  A caller that does not know it leaves the
+    recorded revision untouched rather than erasing it.
+    """
     with db.connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM source_documents WHERE slug = ?", (slug,))
@@ -25,18 +37,21 @@ def upsert_source_document_from_values(
                 cur.execute(
                     "UPDATE source_documents SET "
                     "source_family = ?, title = ?, language = ?, "
-                    "page_url = ?, source_url = ?, updated_at = datetime('now') "
+                    "page_url = ?, source_url = ?, "
+                    "revision = COALESCE(?, revision), "
+                    "updated_at = datetime('now') "
                     "WHERE slug = ?",
-                    (source_family, title, language, page_url, source_url, slug),
+                    (source_family, title, language, page_url, source_url,
+                     revision, slug),
                 )
                 conn.commit()
                 return existing["id"]
 
             cur.execute(
                 "INSERT INTO source_documents "
-                "(slug, source_family, title, language, page_url, source_url) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (slug, source_family, title, language, page_url, source_url),
+                "(slug, source_family, title, language, page_url, source_url, revision) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (slug, source_family, title, language, page_url, source_url, revision),
             )
             doc_id = cur.lastrowid
             conn.commit()
@@ -153,7 +168,31 @@ def list_documents(db: Database) -> list[dict]:
 
 
 def reference_exists(db: Database, entry_ref: str) -> bool:
+    """Whether *entry_ref* is in the corpus.
+
+    Uses the same canonical matching as ``lookup_reference``: strict ref-only
+    answering must not declare a rule out of corpus just because it was
+    stored with its heading title attached.
+    """
+    wanted = normalize_reference_text(entry_ref)
     row = db.fetch_one(
-        "SELECT 1 FROM regulation_entries WHERE entry_ref = ?", (entry_ref,)
+        "SELECT 1 FROM regulation_entries WHERE entry_ref = ?", (wanted,)
     )
-    return row is not None
+    if row is not None:
+        return True
+
+    canonical = canonical_reference(wanted)
+    if not canonical:
+        return False
+
+    with db.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT entry_ref FROM regulation_entries "
+                "WHERE entry_ref LIKE ? ESCAPE '\\'",
+                (f"{like_escape(canonical)}%",),
+            )
+            return any(
+                canonical_reference(r["entry_ref"]) == canonical
+                for r in cur.fetchall()
+            )

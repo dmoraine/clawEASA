@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -9,6 +10,13 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 
 log = logging.getLogger(__name__)
+
+# EASA advertises each Easy Access Rules document as a dated revision,
+# e.g. "Revision from March 2026".
+REVISION_RE = re.compile(r'Revision\s+from\s+([A-Za-z]+\s+\d{4})', re.IGNORECASE)
+
+# How far up from the link to look for the card that carries the revision.
+_CARD_LOOKUP_DEPTH = 6
 
 EASA_EAR_INDEX_URL = (
     "https://www.easa.europa.eu/en/document-library/easy-access-rules"
@@ -23,6 +31,7 @@ class CatalogEntry:
     title: str
     page_url: str
     source_url: str | None = None
+    revision: str | None = None
 
 
 class EasyAccessRulesCatalogScraper:
@@ -40,7 +49,7 @@ class EasyAccessRulesCatalogScraper:
     def _cache_path(self) -> Path | None:
         if self._cache_dir is None:
             from claw_easa.config import get_settings
-            self._cache_dir = Path(get_settings().data_dir)
+            self._cache_dir = get_settings().data_path
         if self._cache_dir is not None:
             return self._cache_dir / ".ear_catalog_cache.json"
         return None
@@ -148,8 +157,35 @@ class EasyAccessRulesCatalogScraper:
                 href = f"https://www.easa.europa.eu{href}"
             slug = href.rstrip("/").rsplit("/", 1)[-1]
             slug = slug.replace("easy-access-rules-", "")
-            entries.append(CatalogEntry(slug=slug, title=text, page_url=href))
+            entries.append(CatalogEntry(
+                slug=slug,
+                title=text,
+                page_url=href,
+                revision=EasyAccessRulesCatalogScraper._extract_revision(link),
+            ))
         return entries
+
+    @staticmethod
+    def _extract_revision(link) -> str | None:
+        """Read the published revision off the catalogue card holding *link*.
+
+        Only the card's own subtree is searched — reading the whole listing
+        would label every document with the first card's revision.
+        """
+        node = link
+        for _ in range(_CARD_LOOKUP_DEPTH):
+            node = node.parent
+            if node is None or node.name in (None, "body", "html"):
+                return None
+            classes = node.get("class") or []
+            is_card = node.name == "article" or any(
+                "content-item" in cls for cls in classes
+            )
+            if not is_card:
+                continue
+            match = REVISION_RE.search(node.get_text(" ", strip=True))
+            return match.group(1) if match else None
+        return None
 
     # ── File cache ────────────────────────────────────────────────────
 

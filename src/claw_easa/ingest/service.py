@@ -74,7 +74,7 @@ def fetch_source(slug: str, *, url: str | None = None, use_browser: bool = False
     """
     source = _resolve_source(slug, url=url)
     settings = get_settings()
-    data_dir = Path(settings.data_dir)
+    data_dir = settings.data_path
 
     if use_browser:
         from claw_easa.ingest.scraper_browser import BrowserSourceFetcher
@@ -167,7 +167,7 @@ def import_local_source(slug: str, file_path: str | Path) -> dict:
         raise FileNotFoundError(f"File not found: {src}")
 
     settings = get_settings()
-    target_dir = Path(settings.data_dir) / "downloads" / slug
+    target_dir = settings.data_path / "downloads" / slug
     target_dir.mkdir(parents=True, exist_ok=True)
     dest = target_dir / src.name
 

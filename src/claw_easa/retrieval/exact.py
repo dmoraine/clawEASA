@@ -3,32 +3,96 @@ from __future__ import annotations
 import logging
 
 from claw_easa.db.sqlite import Database
+from claw_easa.references import (
+    canonical_reference,
+    is_reference_query,
+    like_escape,
+    normalize_reference_text,
+)
 from claw_easa.retrieval.fts_compat import to_fts5_query
 
 log = logging.getLogger(__name__)
 
+_ENTRY_COLUMNS = (
+    "SELECT e.id, e.entry_ref, e.entry_type, e.title, e.body_text, "
+    "       e.body_markdown, d.slug, "
+    "       p.part_code, sp.subpart_code "
+    "FROM regulation_entries e "
+    "JOIN source_documents d ON d.id = e.document_id "
+    "JOIN regulation_parts p ON p.id = e.part_id "
+    "JOIN regulation_subparts sp ON sp.id = e.subpart_id "
+)
+
 
 def lookup_reference(db: Database, ref: str) -> list[dict]:
+    """Resolve an exact regulation reference.
+
+    Falls back to canonical matching so that entries persisted with the
+    heading title still attached — ``'M.A.201 Responsibilities'`` — answer a
+    lookup of ``M.A.201``.
+    """
+    wanted = normalize_reference_text(ref)
+    with db.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                _ENTRY_COLUMNS + "WHERE e.entry_ref = ? ORDER BY e.entry_type",
+                (wanted,),
+            )
+            rows = cur.fetchall()
+            if rows:
+                return rows
+
+            canonical = canonical_reference(wanted)
+            if not canonical:
+                return []
+
+            cur.execute(
+                _ENTRY_COLUMNS
+                + "WHERE e.entry_ref LIKE ? ESCAPE '\\' ORDER BY e.entry_type",
+                (f"{like_escape(canonical)}%",),
+            )
+            return [
+                row for row in cur.fetchall()
+                if canonical_reference(row["entry_ref"]) == canonical
+            ]
+
+
+def _search_by_reference(
+    db: Database, query: str, limit: int, slug: str | None,
+) -> list[dict]:
+    """Match a bare reference against ``entry_ref`` only.
+
+    A reference query has to be answered by references.  Handing
+    ``IS.I.OR.200`` to FTS degrades it to the tokens ``IS I OR 200``, which
+    matches any entry numbered 200 — an answer about a completely different
+    regulation, phrased as if it were about information security.
+    """
+    pattern = f"%{like_escape(normalize_reference_text(query))}%"
     sql = (
         "SELECT e.id, e.entry_ref, e.entry_type, e.title, e.body_text, "
-        "       e.body_markdown, d.slug, "
-        "       p.part_code, sp.subpart_code "
+        "       d.slug, p.part_code, sp.subpart_code, "
+        "       1.0 AS fts_score "
         "FROM regulation_entries e "
         "JOIN source_documents d ON d.id = e.document_id "
         "JOIN regulation_parts p ON p.id = e.part_id "
         "JOIN regulation_subparts sp ON sp.id = e.subpart_id "
-        "WHERE e.entry_ref = ? "
-        "ORDER BY e.entry_type"
+        "WHERE e.entry_ref LIKE ? ESCAPE '\\' "
+        + ("AND d.slug = ? " if slug else "")
+        + "ORDER BY e.entry_ref LIMIT ?"
     )
+    params: tuple = (pattern, slug, limit) if slug else (pattern, limit)
     with db.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (ref,))
+            cur.execute(sql, params)
             return cur.fetchall()
 
 
 def search_references(
     db: Database, query: str, limit: int = 20, *, slug: str | None = None,
 ) -> list[dict]:
+    if is_reference_query(query):
+        return _search_by_reference(db, query, limit, slug)
+
     fts = to_fts5_query(query)
     results: list[dict] = []
 
