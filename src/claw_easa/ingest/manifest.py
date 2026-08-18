@@ -49,6 +49,27 @@ _UNPARSED_STATUSES = frozenset({"registered", "fetched", "incomplete", "error"})
 
 
 @dataclass(frozen=True)
+class RegulationProvenance:
+    """What one regulation contributed to one source in this build.
+
+    ``part_codes`` and ``entry_count`` describe what the build actually
+    holds, not what the regulation declares: a regulation that states an
+    annex the parse dropped reports no parts and no entries, which is what
+    holds the build out of ``qualified``.
+    """
+    identifier: str
+    title: str
+    kind: str
+    part_codes: tuple[str, ...] = ()
+    entry_count: int = 0
+
+    def to_dict(self) -> dict:
+        payload = asdict(self)
+        payload["part_codes"] = list(self.part_codes)
+        return payload
+
+
+@dataclass(frozen=True)
 class SourceProvenance:
     """Where one source in the corpus came from."""
     slug: str
@@ -62,9 +83,19 @@ class SourceProvenance:
     download_url: str | None = None
     entry_count: int = 0
     parsed_at: str | None = None
+    #: What each declared regulation contributed, in the declared order.
+    #: Empty for a source that declares no regulation provenance.
+    regulations: tuple[RegulationProvenance, ...] = ()
+    #: Parts held by this source that no declared regulation claims.  Always
+    #: empty where no regulations are declared — attribution is required only
+    #: where provenance is declared.
+    unattributed_parts: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        payload = asdict(self)
+        payload["regulations"] = [r.to_dict() for r in self.regulations]
+        payload["unattributed_parts"] = list(self.unattributed_parts)
+        return payload
 
 
 @dataclass(frozen=True)
@@ -96,13 +127,95 @@ class BuildManifest:
 # ── Building ────────────────────────────────────────────────────────────
 
 
+def _collect_regulations(db: Database) -> dict[int, tuple[RegulationProvenance, ...]]:
+    """What each declared regulation contributed, keyed by document id.
+
+    Left-joined on the parts attributed to the regulation, so a regulation
+    that contributed nothing to this build is still reported — with no parts
+    and no entries — instead of dropping out of the manifest silently.
+    """
+    sql = (
+        "SELECT sr.document_id, sr.identifier, sr.title, sr.kind, "
+        "       sr.sort_order, rp.part_code, "
+        "       (SELECT COUNT(*) FROM regulation_entries re "
+        "        WHERE re.part_id = rp.id) AS entry_count "
+        "FROM source_regulations sr "
+        "LEFT JOIN regulation_parts rp "
+        "       ON rp.document_id = sr.document_id "
+        "      AND rp.regulation = sr.identifier "
+        "ORDER BY sr.document_id, sr.sort_order, sr.id, rp.sort_order, rp.id"
+    )
+    with db.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+
+    collected: dict[int, dict[str, dict]] = {}
+    for row in rows:
+        by_identifier = collected.setdefault(row["document_id"], {})
+        regulation = by_identifier.setdefault(
+            row["identifier"],
+            {
+                "title": row["title"],
+                "kind": row["kind"],
+                "part_codes": [],
+                "entry_count": 0,
+            },
+        )
+        if row["part_code"] is None:
+            continue
+        regulation["part_codes"].append(row["part_code"])
+        regulation["entry_count"] += row["entry_count"] or 0
+
+    return {
+        document_id: tuple(
+            RegulationProvenance(
+                identifier=identifier,
+                title=regulation["title"],
+                kind=regulation["kind"],
+                part_codes=tuple(regulation["part_codes"]),
+                entry_count=regulation["entry_count"],
+            )
+            for identifier, regulation in by_identifier.items()
+        )
+        for document_id, by_identifier in collected.items()
+    }
+
+
+def _collect_unattributed_parts(db: Database) -> dict[int, tuple[str, ...]]:
+    """Parts no declared regulation claims, keyed by document id.
+
+    Restricted to sources that declare regulations: elsewhere an
+    unattributed part is the normal state, not a gap.
+    """
+    sql = (
+        "SELECT rp.document_id, rp.part_code FROM regulation_parts rp "
+        "WHERE rp.regulation IS NULL "
+        "  AND EXISTS (SELECT 1 FROM source_regulations sr "
+        "              WHERE sr.document_id = rp.document_id) "
+        "ORDER BY rp.document_id, rp.sort_order, rp.id"
+    )
+    with db.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+
+    unattributed: dict[int, list[str]] = {}
+    for row in rows:
+        unattributed.setdefault(row["document_id"], []).append(row["part_code"])
+    return {
+        document_id: tuple(part_codes)
+        for document_id, part_codes in unattributed.items()
+    }
+
+
 def collect_provenance(
     db: Database, *, catalog_revisions: dict[str, str] | None = None,
 ) -> list[SourceProvenance]:
     """Read the provenance of every registered source out of the database."""
     catalog_revisions = catalog_revisions or {}
     sql = (
-        "SELECT sd.slug, sd.source_family, sd.title, sd.status, sd.revision, "
+        "SELECT sd.id, sd.slug, sd.source_family, sd.title, sd.status, sd.revision, "
         "       sd.parsed_at, "
         "       (SELECT COUNT(*) FROM regulation_entries re "
         "        WHERE re.document_id = sd.id) AS entry_count, "
@@ -119,6 +232,9 @@ def collect_provenance(
             cur.execute(sql)
             rows = cur.fetchall()
 
+    regulations = _collect_regulations(db)
+    unattributed = _collect_unattributed_parts(db)
+
     return [
         SourceProvenance(
             slug=row["slug"],
@@ -132,6 +248,8 @@ def collect_provenance(
             download_url=row["download_url"],
             entry_count=row["entry_count"],
             parsed_at=row["parsed_at"],
+            regulations=regulations.get(row["id"], ()),
+            unattributed_parts=unattributed.get(row["id"], ()),
         )
         for row in rows
     ]
@@ -161,6 +279,31 @@ def qualify(
         worsen(FAILED)
         return status, notes
 
+    def note_provenance_gaps(source: SourceProvenance) -> None:
+        """Name every regulation and part the build cannot account for.
+
+        A consolidated document carries more than one regulation: a build
+        that lost one of them still holds entries, so only the per-regulation
+        counts can tell that an annex went missing.  One note per gap, each
+        naming the regulation or the part, so the diagnostics say *which*
+        annex is missing rather than only that something is.
+        """
+        for regulation in source.regulations:
+            if regulation.entry_count:
+                continue
+            notes.append(
+                f"source '{source.slug}' declares regulation "
+                f"'{regulation.identifier}' but holds no entries from it"
+            )
+            worsen(INCOMPLETE)
+
+        for part_code in source.unattributed_parts:
+            notes.append(
+                f"source '{source.slug}' holds part '{part_code}', which no "
+                f"declared regulation claims"
+            )
+            worsen(INCOMPLETE)
+
     for source in sources:
         if source.entry_count == 0 or source.status in _UNPARSED_STATUSES:
             notes.append(
@@ -168,7 +311,13 @@ def qualify(
                 f"(status '{source.status}')"
             )
             worsen(INCOMPLETE)
+            # A source held short of a clean parse *because* an annex went
+            # missing or arrived unclaimed still knows which one: report the
+            # detail before moving on, rather than only the summary line.
+            note_provenance_gaps(source)
             continue
+
+        note_provenance_gaps(source)
 
         local, catalog = source.revision, source.catalog_revision
         if not catalog or not local or local == catalog:
@@ -259,6 +408,28 @@ def record_build(db: Database, manifest: BuildManifest) -> BuildManifest:
     return manifest
 
 
+def _source_from_payload(payload: dict) -> SourceProvenance:
+    """Rebuild a source from recorded JSON.
+
+    Builds recorded before regulation provenance existed carry neither key,
+    and the empty defaults are the truthful reading of those: nothing was
+    declared, so nothing went unattributed.
+    """
+    fields = dict(payload)
+    fields["regulations"] = tuple(
+        RegulationProvenance(
+            identifier=r["identifier"],
+            title=r["title"],
+            kind=r["kind"],
+            part_codes=tuple(r.get("part_codes", ())),
+            entry_count=r.get("entry_count", 0),
+        )
+        for r in fields.pop("regulations", ()) or ()
+    )
+    fields["unattributed_parts"] = tuple(fields.pop("unattributed_parts", ()) or ())
+    return SourceProvenance(**fields)
+
+
 def _row_to_manifest(row: dict | None) -> BuildManifest | None:
     if row is None:
         return None
@@ -266,7 +437,7 @@ def _row_to_manifest(row: dict | None) -> BuildManifest | None:
     return BuildManifest(
         build_id=payload["build_id"],
         status=payload["status"],
-        sources=[SourceProvenance(**s) for s in payload.get("sources", [])],
+        sources=[_source_from_payload(s) for s in payload.get("sources", [])],
         entry_count=payload.get("entry_count", 0),
         notes=payload.get("notes", []),
         tool_version=payload.get("tool_version", ""),

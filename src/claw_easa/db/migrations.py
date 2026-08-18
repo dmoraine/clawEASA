@@ -13,7 +13,7 @@ INITIAL_VERSION = "001_initial"
 #: Shape of the schema this code expects.  ``schema_migrations`` records the
 #: bootstrap version; the structural upgrades below detect what a database is
 #: missing and are safe to run on every ``init_schema()``.
-SCHEMA_VERSION = "002_source_provenance"
+SCHEMA_VERSION = "003_regulation_provenance"
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ class MigrationRunner:
         self.db.execute_script(sql_text)
         self._record(INITIAL_VERSION)
         self._upgrade_source_documents(sql_text)
+        self._upgrade_regulation_parts()
 
     def current_version(self) -> str | None:
         row = self.db.fetch_one(
@@ -62,6 +63,23 @@ class MigrationRunner:
             with conn.cursor() as cur:
                 cur.execute(f"PRAGMA table_info({table})")
                 return [row["name"] for row in cur.fetchall()]
+
+    def _upgrade_regulation_parts(self) -> None:
+        """Carry regulation attribution on a pre-existing parts table.
+
+        ``CREATE TABLE IF NOT EXISTS`` leaves an already-created table alone,
+        so a database built before provenance was tracked has no
+        ``regulation`` column and every part in it reads as unattributed.
+        The column is nullable, so adding it is a plain ``ALTER TABLE``: the
+        parts already stored stay unattributed until the source is parsed
+        again, which is the truthful state — nothing recorded which
+        regulation stated them.
+        """
+        if "regulation" in self._columns("regulation_parts"):
+            return
+
+        log.info("Migrating regulation_parts to %s", SCHEMA_VERSION)
+        self.db.execute("ALTER TABLE regulation_parts ADD COLUMN regulation TEXT")
 
     def _upgrade_source_documents(self, sql_text: str) -> None:
         """Bring a pre-existing source_documents table up to the current shape.

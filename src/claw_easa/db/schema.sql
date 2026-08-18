@@ -35,13 +35,39 @@ CREATE TABLE IF NOT EXISTS source_files (
     downloaded_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Which regulations a source document is built from.
+--
+-- One Easy Access Rules document can consolidate more than one regulation:
+-- the Information Security EAR publishes both Implementing Regulation
+-- (EU) 2023/203 and Delegated Regulation (EU) 2022/1645.  Both number their
+-- first annex 'ANNEX I', so the annex label cannot say which regulation
+-- states a part — the declaration is recorded here and each part carries the
+-- identifier of the regulation stating it.
+-- 'part_codes' is the JSON array of part codes the regulation declares.
+CREATE TABLE IF NOT EXISTS source_regulations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id INTEGER NOT NULL REFERENCES source_documents(id) ON DELETE CASCADE,
+    identifier TEXT NOT NULL,
+    title TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    part_codes TEXT NOT NULL DEFAULT '[]',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(document_id, identifier)
+);
+
 -- Regulatory hierarchy
+-- 'regulation' is the identifier of the regulation stating the part.  It is
+-- NULL when the source declares no regulations, and when no declared
+-- regulation claims the part — an unclaimed part is never filed under a
+-- regulation by proximity, because that would attribute requirements to a
+-- regulation that does not state them.
 CREATE TABLE IF NOT EXISTS regulation_parts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     document_id INTEGER NOT NULL REFERENCES source_documents(id) ON DELETE CASCADE,
     part_code TEXT NOT NULL,
     annex TEXT,
     title TEXT NOT NULL,
+    regulation TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0
 );
 

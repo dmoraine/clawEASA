@@ -11,10 +11,12 @@ from claw_easa.db import Database
 from claw_easa.db.migrations import MigrationRunner
 from claw_easa.ingest.normalize import CanonicalPersister
 from claw_easa.ingest.parser import EASAOfficeXMLParser
+from claw_easa.ingest.regulations import regulations_for
 from claw_easa.ingest.repository import (
     get_document_by_slug,
     get_latest_source_file,
     record_download,
+    record_source_regulations,
     upsert_source_document_from_values,
 )
 from claw_easa.ingest.sources import SourceSpec, get_alias
@@ -240,6 +242,14 @@ def parse_source(slug: str, *, file: str | Path | None = None) -> dict:
         parser = EASAOfficeXMLParser()
         parsed = parser.parse_file(parse_path, doc["title"])
 
+        # Re-declare the source's regulations from the current declaration
+        # before persisting, so each part is attributed to the regulation
+        # that states it.  Declared against the slug the resolved document is
+        # filed under, not the caller's argument, so the provenance follows
+        # the document being parsed.  A slug that declares none records none,
+        # which is how a source without regulation provenance is expressed.
+        record_source_regulations(db, doc["id"], regulations_for(doc["slug"]))
+
         persister = CanonicalPersister(db)
         summary = persister.persist_document(doc["id"], parsed)
 
@@ -251,6 +261,7 @@ def parse_source(slug: str, *, file: str | Path | None = None) -> dict:
             "entries": summary.entries,
             "duplicate_entries_skipped": summary.duplicate_entries_skipped,
             "empty_entries_skipped": summary.empty_entries_skipped,
+            "unattributed_parts": list(summary.unattributed_parts),
         }
     finally:
         db.close()

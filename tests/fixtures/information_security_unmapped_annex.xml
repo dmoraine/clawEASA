@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Easy Access Rules for Information Security carrying an annex that neither
+  contributing regulation declares.
+
+  This is the shape a future EASA revision takes when it adds an annex, or
+  when a part code is spelled differently from the declaration: the document
+  parses cleanly, so nothing about the parse itself is wrong.  What is wrong
+  is the provenance — 'ANNEX III (Part-IS.Z.OR)' cannot be said to come from
+  (EU) 2023/203 or from (EU) 2022/1645, and guessing either would file
+  requirements under a regulation that does not state them.
+-->
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+      <w:r><w:t>Easy Access Rules for Information Security (Regulations (EU) 2023/203 and (EU) 2022/1645)</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX I (Part-IS.I.OR)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>SUBPART A — GENERAL REQUIREMENTS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.I.OR.200 Information security management system (ISMS)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The organisation shall establish, implement and maintain an information security management system.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX III (Part-IS.Z.OR)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>SUBPART A — GENERAL REQUIREMENTS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.Z.OR.200 Information security management system (ISMS)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The organisation shall establish, implement and maintain an information security management system under an annex no declared regulation claims.</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>

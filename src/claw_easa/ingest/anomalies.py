@@ -68,6 +68,7 @@ def detect_anomalies(diagnostics: dict) -> list[Anomaly]:
 
     anomalies.extend(_parse_anomalies(diagnostics))
     anomalies.extend(_coverage_anomalies(diagnostics))
+    anomalies.extend(_provenance_anomalies(diagnostics))
     anomalies.extend(_freshness_anomalies(diagnostics))
 
     return anomalies
@@ -107,6 +108,34 @@ def _coverage_anomalies(diagnostics: dict) -> list[Anomaly]:
             message=f"source '{slug}' is missing from the corpus",
         )
         for slug in missing
+    ]
+
+
+def _provenance_anomalies(diagnostics: dict) -> list[Anomaly]:
+    """Parts no declared regulation states.
+
+    An error, not a warning: the part parsed cleanly, so nothing else reports
+    it, and an answer citing it cannot name the regulation that states the
+    requirement.  Attributing it by proximity would be worse than saying
+    nothing, so it is surfaced here for a human to map.
+    """
+    unattributed = diagnostics.get("unattributed_parts")
+    if not unattributed:
+        return []
+
+    slug = diagnostics.get("slug")
+    subject = f"{slug}: " if slug else ""
+    return [
+        Anomaly(
+            severity="error",
+            category="provenance",
+            message=(
+                f"{subject}part '{part_code}' is stated by none of the "
+                f"regulations declared for the source — it is left "
+                f"unattributed and must be mapped before it is cited"
+            ),
+        )
+        for part_code in unattributed
     ]
 
 

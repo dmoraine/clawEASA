@@ -43,7 +43,14 @@ SLUG_ALIASES: list[SourceAlias] = [
     SourceAlias("initial-airworthiness", ("initial-airworthiness",)),
     SourceAlias("continuing-airworthiness", ("continuing-airworthiness",)),
     SourceAlias("aerodromes", ("aerodromes",)),
-    SourceAlias("information-security", ("information-security",)),
+    SourceAlias(
+        "information-security",
+        ("information-security",),
+        fallback_page_url=(
+            "https://www.easa.europa.eu/en/document-library/easy-access-rules/"
+            "easy-access-rules-information-security-regulations-eu-2023203-and-20221645"
+        ),
+    ),
     SourceAlias("atm-ans", ("air-traffic-managementair-navigation-services",)),
     SourceAlias("sera", ("standardised-european-rules",)),
     SourceAlias("cs-gen-mmel", ("generic-master-minimum-equipment-list-ear-cs",)),

@@ -5,6 +5,8 @@ import re
 
 from claw_easa.db import Database
 from claw_easa.ingest.parser import ParsedDocument
+from claw_easa.ingest.regulations import attribute_part
+from claw_easa.ingest.repository import document_regulations
 
 
 @dataclass(frozen=True)
@@ -16,6 +18,10 @@ class PersistSummary:
     entries: int
     duplicate_entries_skipped: int = 0
     empty_entries_skipped: int = 0
+    #: Part codes that no regulation declared for the source claims, in the
+    #: order they were parsed.  Always empty for a source that declares no
+    #: regulations: attribution is required only where provenance is declared.
+    unattributed_parts: tuple[str, ...] = ()
 
 
 def normalize_title(value: str) -> str:
@@ -63,6 +69,13 @@ class CanonicalPersister:
         self.db = db
 
     def persist_document(self, document_id: int, parsed: ParsedDocument) -> PersistSummary:
+        # Which regulations the source is declared to be built from.  Empty
+        # for a source that declares none, in which case every part is stored
+        # unattributed and nothing is held against it.
+        regulations = document_regulations(self.db, document_id)
+        unattributed_parts: list[str] = []
+        attributed_regulations: set[str] = set()
+
         with self.db.connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM regulation_entries WHERE document_id = ?", (document_id,))
@@ -87,13 +100,26 @@ class CanonicalPersister:
                 seen_entry_refs_global: dict[str, int] = {}
 
                 for part in parsed.parts:
+                    part_code = normalize_title(part.code)
+                    # Both regulations of a consolidated document can number
+                    # their first annex 'ANNEX I', so the part is attributed
+                    # from the declaration, never from its position.  A part
+                    # no declared regulation claims stays NULL and is
+                    # reported: filing it under either regulation would
+                    # attribute requirements to one that does not state them.
+                    regulation = attribute_part(regulations, part_code)
+                    if regulation is not None:
+                        attributed_regulations.add(regulation)
+                    elif regulations:
+                        unattributed_parts.append(part_code)
+
                     cur.execute(
                         "INSERT INTO regulation_parts "
-                        "(document_id, part_code, annex, title, sort_order) "
-                        "VALUES (?, ?, ?, ?, ?)",
-                        (document_id, normalize_title(part.code),
+                        "(document_id, part_code, annex, title, regulation, sort_order) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (document_id, part_code,
                          normalize_title(part.annex), normalize_title(part.title),
-                         part.sort_order),
+                         regulation, part.sort_order),
                     )
                     part_id = cur.lastrowid
                     parts_count += 1
@@ -173,7 +199,20 @@ class CanonicalPersister:
                 # A parse that produced nothing is not a successful parse:
                 # recording it as 'parsed' hides a document whose structure
                 # the parser did not understand behind a green ingest.
-                status = 'parsed' if entries_count else 'incomplete'
+                #
+                # Neither is a parse whose provenance does not add up.  A part
+                # no declared regulation claims, or a declared regulation that
+                # contributed no part at all, means the document no longer
+                # matches what the source is declared to be built from — an
+                # annex added, renamed or dropped by a later revision.  Either
+                # way the citations it would answer with cannot be trusted to
+                # name the regulation that states them.
+                silent_regulations = [
+                    regulation.identifier for regulation in regulations
+                    if regulation.identifier not in attributed_regulations
+                ]
+                provenance_holds = bool(unattributed_parts or silent_regulations)
+                status = 'parsed' if entries_count and not provenance_holds else 'incomplete'
                 cur.execute(
                     "UPDATE source_documents "
                     "SET status = ?, parsed_at = datetime('now'), "
@@ -191,4 +230,5 @@ class CanonicalPersister:
             entries=entries_count,
             duplicate_entries_skipped=duplicate_entries_skipped,
             empty_entries_skipped=empty_entries_skipped,
+            unattributed_parts=tuple(unattributed_parts),
         )
