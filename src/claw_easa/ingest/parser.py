@@ -147,8 +147,12 @@ class EASAOfficeXMLParser:
         r'SUBPART\s+([A-Z]+)[\s:–-]+(.*)',
         re.IGNORECASE,
     )
+    # Part-ORA numbers its sections in Roman — 'SECTION I – General',
+    # 'SECTION II – Management' — where Air Ops numbers them in Arabic.
+    # Reading digits alone recognises no section in Part-ORA, collapsing a
+    # subpart into one 'General' section that states its management rules.
     SECTION_PATTERN = re.compile(
-        r'SECTION\s+(\d+)\s*[–-]\s*(.*)',
+        r'SECTION\s+(\d+|[IVX]+)\s*[–-]\s*(.*)',
         re.IGNORECASE,
     )
     # Single-letter (M.A.201) and numeric (145.A.30, 21.A.139) part codes are
@@ -164,8 +168,28 @@ class EASAOfficeXMLParser:
         r'^(GM\d+\s*.+)',
         re.IGNORECASE,
     )
+    # An entry heading sits at whatever depth its subdivision needs: a rule of
+    # a plain section is a 'Heading4IR', the same rule under a chapter of that
+    # section is a 'Heading5IR', and the AMC of that chapter rule is a
+    # 'Heading6AMC'.  The depth says nothing about what the heading is, so an
+    # entry is recognised by the IR/AMC/GM suffix at any of them — listing
+    # levels leaves the deeper soft law unread and appended to the body of the
+    # implementing rule above it, presenting guidance as binding text.
+    ENTRY_STYLE_PATTERN = re.compile(r'^Heading[2-7](IR|AMC|GM)$')
     BASIC_ARTICLE_PATTERN = re.compile(
         r'^Article\s+(\d+[A-Z]*)\s*[–-]?\s*(.*)',
+        re.IGNORECASE,
+    )
+    # The Basic Regulation states its soft law as 'AMC1 Article 3 – Common
+    # requirements', repeating the title of the article it qualifies.  An
+    # article reference carries no dotted code, so canonicalisation cannot
+    # strip that title back off at lookup time the way it does for 'AMC1
+    # M.A.201 Responsibilities': the entry is stored under the whole heading
+    # and a lookup of 'AMC1 Article 3' — the reference EASA cites it by —
+    # answers nothing.  A paragraph selector stays in, or the several AMCs of
+    # one article would collide under a single reference.
+    ARTICLE_SOFT_LAW_PATTERN = re.compile(
+        r'^((?:AMC|GM)\d+\s+Article\s+\d+[A-Z]*(?:;?\([^)]*\))*)',
         re.IGNORECASE,
     )
     CHAPTER_PATTERN = re.compile(
@@ -475,19 +499,26 @@ class EASAOfficeXMLParser:
                     subpart_indices.append((i, match.group(1), match.group(2).strip()))
 
         subparts: list[ParsedSubpart] = []
+
+        # Air Ops scopes an annex before it subdivides it: 'ORO.GEN.005
+        # Scope' is stated under ANNEX III (Part-ORO) itself, above SUBPART
+        # GEN.  Reading only from the first SUBPART heading onwards drops it,
+        # and drops every rule of a part that has no subparts at all.
+        lead_sections = self._parse_sections(
+            paragraphs, start_idx,
+            subpart_indices[0][0] if subpart_indices else end_idx,
+        )
+        if lead_sections:
+            subparts.append(ParsedSubpart(
+                code='GENERAL', title='General', sort_order=1, sections=lead_sections,
+            ))
+
         for idx, (sp_start, code, title) in enumerate(subpart_indices):
             sp_end = subpart_indices[idx + 1][0] if idx + 1 < len(subpart_indices) else end_idx
             sections = self._parse_sections(paragraphs, sp_start, sp_end)
             subparts.append(ParsedSubpart(
-                code=code, title=title, sort_order=idx + 1, sections=sections,
+                code=code, title=title, sort_order=len(subparts) + 1, sections=sections,
             ))
-
-        if not subpart_indices:
-            sections = self._parse_sections(paragraphs, start_idx, end_idx)
-            if sections:
-                subparts.append(ParsedSubpart(
-                    code='GENERAL', title='General', sort_order=1, sections=sections,
-                ))
         return subparts
 
     def _parse_sections(
@@ -502,15 +533,22 @@ class EASAOfficeXMLParser:
                     section_indices.append((i, para.text))
 
         sections: list[ParsedSection] = []
-        if not section_indices:
-            entries = self._parse_entries(paragraphs, start_idx, end_idx)
-            if entries:
-                sections.append(ParsedSection(title='General', sort_order=1, entries=entries))
-        else:
-            for idx, (sec_start, title) in enumerate(section_indices):
-                sec_end = section_indices[idx + 1][0] if idx + 1 < len(section_indices) else end_idx
-                entries = self._parse_entries(paragraphs, sec_start, sec_end)
-                sections.append(ParsedSection(title=title, sort_order=idx + 1, entries=entries))
+
+        # Part-CAT states 'CAT.GEN.100 Competent authority' under SUBPART A,
+        # above its first SECTION — the same lead-in shape a subpart has.
+        lead_entries = self._parse_entries(
+            paragraphs, start_idx,
+            section_indices[0][0] if section_indices else end_idx,
+        )
+        if lead_entries:
+            sections.append(ParsedSection(title='General', sort_order=1, entries=lead_entries))
+
+        for idx, (sec_start, title) in enumerate(section_indices):
+            sec_end = section_indices[idx + 1][0] if idx + 1 < len(section_indices) else end_idx
+            entries = self._parse_entries(paragraphs, sec_start, sec_end)
+            sections.append(ParsedSection(
+                title=title, sort_order=len(sections) + 1, entries=entries,
+            ))
         return sections
 
     def _parse_entries(
@@ -528,13 +566,13 @@ class EASAOfficeXMLParser:
             entries.append(self._parse_entry(paragraphs, info, idx + 1, ent_start, ent_end))
         return entries
 
+    #: Air Ops uses level-2 headings for both a SUBPART title and a rule
+    #: stated above it ('ORO.GEN.005 Scope').  Only a heading carrying a rule
+    #: reference is an entry here, so these styles get no INFO fallback.
+    _SUBPART_LEVEL_STYLES = frozenset(('Heading2IR', 'Heading2AMC', 'Heading2GM'))
+
     def _identify_entry(self, para: OfficeXMLParagraph) -> dict[str, str] | None:
-        valid_styles = (
-            'Heading3IR', 'Heading3AMC', 'Heading3GM',
-            'Heading4IR', 'Heading4AMC', 'Heading4GM',
-            'Heading5AMC', 'Heading5GM', 'Heading5IR',
-        )
-        if para.style not in valid_styles:
+        if not self.ENTRY_STYLE_PATTERN.match(para.style):
             return None
         text = para.text.strip()
 
@@ -546,12 +584,18 @@ class EASAOfficeXMLParser:
         if 'AMC' in para.style:
             match = self.ARTICLE_AMC_PATTERN.match(text) or self.ARTICLE_IR_PATTERN.match(text)
             if match:
-                return {'entry_type': 'AMC', 'entry_ref': match.group(1), 'title': text}
+                ref = match.group(1)
+                if ' Article ' in ref and ' – ' in ref:
+                    ref = ref.split(' – ', 1)[0].strip()
+                return {'entry_type': 'AMC', 'entry_ref': ref, 'title': text}
 
         if 'GM' in para.style:
             match = self.ARTICLE_GM_PATTERN.match(text) or self.ARTICLE_IR_PATTERN.match(text)
             if match:
-                return {'entry_type': 'GM', 'entry_ref': match.group(1), 'title': text}
+                ref = match.group(1)
+                if ' Article ' in ref and ' – ' in ref:
+                    ref = ref.split(' – ', 1)[0].strip()
+                return {'entry_type': 'GM', 'entry_ref': ref, 'title': text}
 
         if 'IR' in para.style:
             match = self.ARTICLE_IR_PATTERN.match(text)
@@ -568,6 +612,9 @@ class EASAOfficeXMLParser:
         ir_match = self.ARTICLE_IR_PATTERN.match(text)
         if ir_match:
             return {'entry_type': 'IR', 'entry_ref': ir_match.group(1), 'title': text}
+
+        if para.style in self._SUBPART_LEVEL_STYLES:
+            return None
 
         return {'entry_type': 'INFO', 'entry_ref': text[:50], 'title': text}
 
@@ -756,11 +803,6 @@ class EASAOfficeXMLParser:
                     chapters.append((i, match.group(1), match.group(2).strip()))
         return chapters
 
-    ROMAN_SECTION_PATTERN = re.compile(
-        r'^SECTION\s+([IVX]+)\s*[–-]\s*(.*)',
-        re.IGNORECASE,
-    )
-
     def _find_section_boundaries(
         self, paragraphs: list[OfficeXMLParagraph], start_idx: int, end_idx: int,
     ) -> list[tuple[int, str]]:
@@ -770,8 +812,7 @@ class EASAOfficeXMLParser:
             para = paragraphs[i]
             if para.style == 'Heading2':
                 text = para.text.strip()
-                if (self.SECTION_PATTERN.match(text)
-                        or self.ROMAN_SECTION_PATTERN.match(text)):
+                if self.SECTION_PATTERN.match(text):
                     sections.append((i, text))
         return sections
 

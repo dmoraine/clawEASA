@@ -19,9 +19,12 @@ import re
 
 # The reference itself, without any prefix.  Either a letter-led code
 # ('M', 'ML', 'CAMO', 'ORO') or a numeric part code ('145', '21', '66'),
-# followed by at least one dotted component.
+# followed by at least one dotted component.  A component is spelled in mixed
+# case where EASA spells it so — Part-ORA writes 'ORA.AeMC.115' — and reading
+# only its uppercase head would truncate three distinct aero-medical rules to
+# the one reference 'ORA.A'.
 REFERENCE_CORE = (
-    r'(?:[A-Z]+[A-Z0-9]*|[0-9]+)(?:\.[A-Z0-9-]+)+'
+    r'(?:[A-Z]+[A-Z0-9]*|[0-9]+)(?:\.[A-Z0-9-][A-Za-z0-9-]*)+'
     r'(?:\([^)]*\)(?:;\([^)]*\))*)?'
 )
 
