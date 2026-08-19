@@ -1,5 +1,7 @@
 """Phase 1 tests — SQLite foundation layer."""
 
+import logging
+
 import pytest
 
 from claw_easa.config import Settings, reset_settings
@@ -80,6 +82,19 @@ class TestSchemaCreation:
         runner.init_schema()
         row = db.fetch_one("SELECT COUNT(*) AS cnt FROM schema_migrations")
         assert row["cnt"] >= 1
+
+    def test_reinitialising_rebuilds_nothing(self, db, caplog):
+        """A database already in the current shape is left alone.
+
+        ``init_schema`` runs on every open, so a shape comparison that never
+        matches would drop and recreate the corpus tables on each one — the
+        migration would silently become part of normal operation.
+        """
+        with caplog.at_level(logging.INFO, logger="claw_easa.db.migrations"):
+            MigrationRunner(db).init_schema()
+
+        migrated = [r.getMessage() for r in caplog.records if "Migrating" in r.getMessage()]
+        assert not migrated, f"a database in the current shape was rebuilt: {migrated}"
 
 
 class TestFTS5:

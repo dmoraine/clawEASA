@@ -7,6 +7,10 @@ they contributed.  The qualification statuses are ``qualified``,
 
 The load-bearing rule is the last one tested here: a build that did not
 qualify must never displace the last one that did.
+
+The build history in SQLite records the operational vocabulary — a qualified
+build is stored as ``current`` — so ``TestRecordedStatus`` pins what crosses
+that boundary in each direction.
 """
 from __future__ import annotations
 
@@ -163,6 +167,93 @@ class TestPersistence:
         second = record_build(db, build_manifest(db))
 
         assert first.build_id != second.build_id
+
+
+#: ``corpus_builds`` exactly as schema 003 left it, for the upgrade path.
+LEGACY_CORPUS_BUILDS = """
+CREATE TABLE corpus_builds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    build_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL
+        CHECK(status IN ('qualified', 'incomplete', 'stale', 'failed')),
+    tool_version TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    source_count INTEGER NOT NULL DEFAULT 0,
+    entry_count INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    manifest_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"""
+
+
+class TestRecordedStatus:
+    """What the manifest grades, and what the build history stores.
+
+    The two vocabularies meet in ``record_build``.  A build graded now is
+    recorded as ``current``; a build some older version already stored as
+    ``qualified`` is not, because nothing compared it against EASA.
+    """
+
+    def test_a_qualified_build_is_recorded_as_current(self, db):
+        _ingest(db, "air-ops", revision="March 2026")
+
+        recorded = record_build(
+            db, build_manifest(db, catalog_revisions={"air-ops": "March 2026"}),
+        )
+
+        assert recorded.status == "qualified", "the manifest changed vocabulary"
+        row = db.fetch_one(
+            "SELECT status FROM corpus_builds WHERE build_id = ?", (recorded.build_id,)
+        )
+        assert row["status"] == "current", (
+            f"a qualified build is recorded as {row['status']!r}"
+        )
+        assert last_qualified_build(db).build_id == recorded.build_id
+
+    @pytest.mark.parametrize("status", ["incomplete", "failed"])
+    def test_every_other_status_is_recorded_unchanged(self, db, status):
+        if status == "incomplete":
+            _ingest(db, "air-ops", revision="March 2026")
+        _ingest(db, "mystery-ear", entries=False)
+
+        recorded = record_build(db, build_manifest(db))
+
+        assert recorded.status == status
+        row = db.fetch_one(
+            "SELECT status FROM corpus_builds WHERE build_id = ?", (recorded.build_id,)
+        )
+        assert row["status"] == status
+
+    def test_a_build_stored_as_qualified_migrates_to_freshness_unknown(self, tmp_path):
+        legacy = Database(
+            settings=Settings(data_dir=str(tmp_path), db_file="legacy.db")
+        )
+        legacy.open()
+        legacy.execute_script(LEGACY_CORPUS_BUILDS)
+        legacy.execute(
+            "INSERT INTO corpus_builds (build_id, status, tool_version, "
+            "schema_version, entry_count, manifest_json) "
+            "VALUES ('build-legacy', 'qualified', '0.1.0', "
+            "'003_regulation_provenance', 1, ?)",
+            (json.dumps({"build_id": "build-legacy", "status": "qualified"}),),
+        )
+
+        MigrationRunner(legacy).init_schema()
+
+        row = legacy.fetch_one(
+            "SELECT status, role FROM corpus_builds WHERE build_id = 'build-legacy'"
+        )
+        assert row["status"] == "freshness-unknown", (
+            f"a build nothing ever compared against EASA reads as {row['status']!r}"
+        )
+        assert last_qualified_build(legacy) is None, (
+            "a migrated build is offered as the last qualified one"
+        )
+        assert row["role"] == "current", (
+            "the database holds a corpus but no build is in the current slot"
+        )
+        legacy.close()
 
 
 class TestJSONExport:

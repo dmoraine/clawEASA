@@ -17,6 +17,12 @@ Builds are append-only.  ``last_qualified_build`` therefore keeps answering
 with the last good build no matter how many incomplete or failed builds are
 recorded after it — a bad rebuild degrades what is *reported*, never what was
 last known to be sound.
+
+The build history in SQLite records the operational vocabulary defined in
+``claw_easa.freshness``, where the grade for a complete, unsuperseded corpus
+is ``current``.  ``qualified`` is this module's own older name for that same
+state, so it is translated at the database boundary and nowhere else: a
+manifest — in memory and in the exported JSON — keeps saying ``qualified``.
 """
 from __future__ import annotations
 
@@ -30,6 +36,7 @@ from pathlib import Path
 from claw_easa import __version__
 from claw_easa.db.migrations import SCHEMA_VERSION
 from claw_easa.db.sqlite import Database
+from claw_easa.freshness import CURRENT
 from claw_easa.ingest.anomalies import revision_key
 
 log = logging.getLogger(__name__)
@@ -43,6 +50,18 @@ FAILED = "failed"
 
 #: Worst status wins when a build trips more than one rule.
 _SEVERITY = {QUALIFIED: 0, STALE: 1, INCOMPLETE: 2, FAILED: 3}
+
+#: How a status graded here is written to the build history.  Only
+#: ``qualified`` is renamed — ``stale``, ``incomplete`` and ``failed`` already
+#: mean the same thing in both vocabularies.
+#:
+#: Note the asymmetry with the migration in ``db.migrations``, which carries a
+#: row *already stored* as 'qualified' over to 'freshness-unknown' instead.
+#: Both are right: a build recorded here has just been graded by ``qualify``
+#: against the catalogue revisions the caller supplied, while a row written by
+#: an older version is a closed record that can no longer be compared against
+#: anything — nothing in it establishes that it was up to date.
+_RECORDED_STATUS = {QUALIFIED: CURRENT}
 
 #: Source statuses that mean the document never reached a usable parse.
 _UNPARSED_STATUSES = frozenset({"registered", "fetched", "incomplete", "error"})
@@ -366,8 +385,13 @@ def record_build(db: Database, manifest: BuildManifest) -> BuildManifest:
 
     Never updates or deletes an earlier build, so the last qualified one
     survives every later incomplete or failed build.
+
+    The status is translated to the vocabulary the history records; the
+    manifest itself is returned and stored as JSON unchanged, so what was
+    graded stays legible next to what was recorded.
     """
     payload = manifest.to_dict()
+    recorded_status = _RECORDED_STATUS.get(manifest.status, manifest.status)
     with db.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -377,7 +401,7 @@ def record_build(db: Database, manifest: BuildManifest) -> BuildManifest:
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     manifest.build_id,
-                    manifest.status,
+                    recorded_status,
                     manifest.tool_version,
                     manifest.schema_version,
                     len(manifest.sources),
@@ -454,11 +478,19 @@ def latest_build(db: Database) -> BuildManifest | None:
 
 
 def last_qualified_build(db: Database) -> BuildManifest | None:
-    """The most recent qualified build, ignoring anything recorded after it."""
+    """The most recent qualified build, ignoring anything recorded after it.
+
+    Matches on the status the history records rather than the one the
+    manifest carries, and only on that one: a build migrated from an older
+    database reads as 'freshness-unknown' and is deliberately not offered
+    here, because nothing established that it was up to date.  Such a
+    database still knows which corpus it holds — the migration points the
+    'current' role slot at it.
+    """
     return _row_to_manifest(
         db.fetch_one(
             "SELECT * FROM corpus_builds WHERE status = ? ORDER BY id DESC LIMIT 1",
-            (QUALIFIED,),
+            (_RECORDED_STATUS[QUALIFIED],),
         )
     )
 
