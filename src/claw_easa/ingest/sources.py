@@ -5,13 +5,22 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SourceSpec:
-    """Internal representation of a source document for fetching/parsing."""
+    """Internal representation of a source document for fetching/parsing.
+
+    ``revision``, ``published_at`` and ``checked_at`` are the catalogue
+    reading the source was resolved from, carried through the fetch so that
+    what EASA advertised for the artefact is recorded alongside it.  They are
+    ``None`` for a source resolved without reading the catalogue.
+    """
     slug: str
     source_family: str
     title: str
     language: str = "en"
     page_url: str = ""
     source_url: str | None = None
+    revision: str | None = None
+    published_at: str | None = None
+    checked_at: str | None = None
 
 
 @dataclass(frozen=True)

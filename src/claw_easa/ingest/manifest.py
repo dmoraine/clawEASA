@@ -128,11 +128,27 @@ class SourceProvenance:
     source_family: str
     title: str | None = None
     status: str = "registered"
+    #: Where the artefact came from: the EASA page it was resolved from, the
+    #: URL given for it, and the URL it was actually downloaded from.
+    page_url: str | None = None
+    source_url: str | None = None
+    #: The edition held — EASA's own label and that label as a sortable date.
     revision: str | None = None
+    published_at: str | None = None
+    #: What the EASA catalogue advertised, and when it was read.  All three
+    #: absent is the ordinary state of a source nobody checked, and grades
+    #: ``freshness-unknown`` rather than passing as current.
     catalog_revision: str | None = None
+    catalog_published_at: str | None = None
+    catalog_checked_at: str | None = None
+    #: Which parser produced the entries held.
+    parser_version: str | None = None
+    #: The artefact itself: its SHA-256, where it is kept, and when it was
+    #: retrieved.
     checksum: str | None = None
     local_path: str | None = None
     download_url: str | None = None
+    retrieved_at: str | None = None
     entry_count: int = 0
     parsed_at: str | None = None
     #: This source on the ladder of ``claw_easa.freshness``, as ``qualify``
@@ -269,17 +285,41 @@ def _collect_unattributed_parts(db: Database) -> dict[int, tuple[str, ...]]:
     }
 
 
+def _catalog_reading(row: dict, supplied: str | None) -> tuple[str | None, ...]:
+    """What EASA advertises for one source: revision, its date, when read.
+
+    A revision the caller supplies comes from a catalogue read now, so the
+    dates stored against an earlier reading are not carried over with it:
+    pairing a newly advertised label with the publication date of the one it
+    supersedes would read as 'the catalogue is not newer' and grade a
+    superseded copy current.  A caller that supplies nothing — or supplies
+    what is already stored — leaves the stored reading as it is.
+    """
+    stored = row["catalog_revision"]
+    if supplied is None or supplied == stored:
+        return stored, row["catalog_published_at"], row["catalog_checked_at"]
+    return supplied, None, None
+
+
 def collect_provenance(
     db: Database, *, catalog_revisions: dict[str, str] | None = None,
 ) -> list[SourceProvenance]:
-    """Read the provenance of every registered source out of the database."""
+    """Read the provenance of every registered source out of the database.
+
+    *catalog_revisions* is a catalogue read now, which overrides the reading
+    stored against a source.  Without one the stored reading still stands —
+    it is what EASA advertised when the artefact was retrieved, and dropping
+    it would lose the only comparison a corpus qualified offline can make.
+    """
     catalog_revisions = catalog_revisions or {}
     sql = (
-        "SELECT sd.id, sd.slug, sd.source_family, sd.title, sd.status, sd.revision, "
-        "       sd.parsed_at, "
+        "SELECT sd.id, sd.slug, sd.source_family, sd.title, sd.status, "
+        "       sd.page_url, sd.source_url, sd.revision, sd.published_at, "
+        "       sd.catalog_revision, sd.catalog_published_at, "
+        "       sd.catalog_checked_at, sd.parser_version, sd.parsed_at, "
         "       (SELECT COUNT(*) FROM regulation_entries re "
         "        WHERE re.document_id = sd.id) AS entry_count, "
-        "       sf.checksum, sf.local_path, sf.download_url "
+        "       sf.checksum, sf.local_path, sf.download_url, sf.downloaded_at "
         "FROM source_documents sd "
         "LEFT JOIN source_files sf ON sf.id = ("
         "    SELECT id FROM source_files "
@@ -295,24 +335,34 @@ def collect_provenance(
     regulations = _collect_regulations(db)
     unattributed = _collect_unattributed_parts(db)
 
-    return [
-        SourceProvenance(
+    sources = []
+    for row in rows:
+        catalog_revision, catalog_published_at, catalog_checked_at = _catalog_reading(
+            row, catalog_revisions.get(row["slug"]),
+        )
+        sources.append(SourceProvenance(
             slug=row["slug"],
             source_family=row["source_family"],
             title=row["title"],
             status=row["status"],
+            page_url=row["page_url"],
+            source_url=row["source_url"],
             revision=row["revision"],
-            catalog_revision=catalog_revisions.get(row["slug"]),
+            published_at=row["published_at"],
+            catalog_revision=catalog_revision,
+            catalog_published_at=catalog_published_at,
+            catalog_checked_at=catalog_checked_at,
+            parser_version=row["parser_version"],
             checksum=row["checksum"],
             local_path=row["local_path"],
             download_url=row["download_url"],
+            retrieved_at=row["downloaded_at"],
             entry_count=row["entry_count"],
             parsed_at=row["parsed_at"],
             regulations=regulations.get(row["id"], ()),
             unattributed_parts=unattributed.get(row["id"], ()),
-        )
-        for row in rows
-    ]
+        ))
+    return sources
 
 
 def _provenance_gaps(source: SourceProvenance) -> list[str]:
@@ -359,7 +409,10 @@ def grade_source(source: SourceProvenance) -> Freshness:
             f"The source contributed no entries (status '{source.status}').",
         )
     return grade_freshness(
-        revision=source.revision, catalog_revision=source.catalog_revision,
+        revision=source.revision,
+        published_at=source.published_at,
+        catalog_revision=source.catalog_revision,
+        catalog_published_at=source.catalog_published_at,
     )
 
 
@@ -504,16 +557,25 @@ def record_build(db: Database, manifest: BuildManifest) -> BuildManifest:
             for source in manifest.sources:
                 cur.execute(
                     "INSERT INTO corpus_build_sources "
-                    "(build_db_id, slug, source_family, title, status, revision, "
-                    " catalog_revision, checksum, local_path, download_url, "
-                    " entry_count, parsed_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "(build_db_id, slug, source_family, title, status, "
+                    " freshness, freshness_basis, freshness_detail, "
+                    " page_url, source_url, revision, published_at, "
+                    " catalog_revision, catalog_published_at, catalog_checked_at, "
+                    " parser_version, checksum, local_path, download_url, "
+                    " retrieved_at, entry_count, parsed_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                    "        ?, ?, ?, ?, ?)",
                     (
                         build_db_id, source.slug, source.source_family,
-                        source.title, source.status, source.revision,
-                        source.catalog_revision, source.checksum,
-                        source.local_path, source.download_url,
-                        source.entry_count, source.parsed_at,
+                        source.title, source.status,
+                        source.freshness, source.freshness_basis,
+                        source.freshness_detail,
+                        source.page_url, source.source_url,
+                        source.revision, source.published_at,
+                        source.catalog_revision, source.catalog_published_at,
+                        source.catalog_checked_at, source.parser_version,
+                        source.checksum, source.local_path, source.download_url,
+                        source.retrieved_at, source.entry_count, source.parsed_at,
                     ),
                 )
         conn.commit()

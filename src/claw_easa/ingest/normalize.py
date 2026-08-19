@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import re
 
 from claw_easa.db import Database
-from claw_easa.ingest.parser import ParsedDocument
+from claw_easa.ingest.parser import PARSER_VERSION, ParsedDocument
 from claw_easa.ingest.regulations import attribute_part
 from claw_easa.ingest.repository import document_regulations
 
@@ -213,12 +213,15 @@ class CanonicalPersister:
                 ]
                 provenance_holds = bool(unattributed_parts or silent_regulations)
                 status = 'parsed' if entries_count and not provenance_holds else 'incomplete'
+                # Stamped with the entries it produced, so the recorded parser
+                # version is the one that read them and not whichever version
+                # happens to be installed when the corpus is later qualified.
                 cur.execute(
                     "UPDATE source_documents "
-                    "SET status = ?, parsed_at = datetime('now'), "
+                    "SET status = ?, parser_version = ?, parsed_at = datetime('now'), "
                     "    updated_at = datetime('now') "
                     "WHERE id = ?",
-                    (status, document_id),
+                    (status, PARSER_VERSION, document_id),
                 )
             conn.commit()
 

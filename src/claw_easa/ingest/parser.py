@@ -27,6 +27,14 @@ logger = logging.getLogger(__name__)
 #: recognised.  Distinct from a mode that ran and legitimately found nothing.
 UNRECOGNISED_MODE = 'unrecognised'
 
+#: Which reading of a source document the entries currently held came from,
+#: recorded against every source this parser persists.  Bumped when a change
+#: here alters the entries extracted from an unchanged document, so a corpus
+#: can be told apart from one built by an earlier reading of the same file.
+#: A version axis of its own: the tool, the schema and the EASA edition held
+#: all move independently of it.
+PARSER_VERSION = 'easa-office-xml/1'
+
 # ── Data classes ────────────────────────────────────────────────────────────
 
 

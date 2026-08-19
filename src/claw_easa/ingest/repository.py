@@ -24,37 +24,59 @@ def upsert_source_document_from_values(
     page_url: str | None = None,
     source_url: str | None = None,
     revision: str | None = None,
+    published_at: str | None = None,
+    catalog_revision: str | None = None,
+    catalog_published_at: str | None = None,
+    catalog_checked_at: str | None = None,
 ) -> int:
     """Register or update a source document.
 
     *revision* is the dated revision EASA published for the ingested copy
-    (e.g. ``'March 2026'``).  A caller that does not know it leaves the
-    recorded revision untouched rather than erasing it.
+    (e.g. ``'March 2026'``) and *published_at* that label as a sortable date.
+    *catalog_revision*, *catalog_published_at* and *catalog_checked_at* are
+    what the EASA catalogue advertised, and when it was read.
+
+    Every one of them is left untouched by a caller that does not know it,
+    rather than erased: a manual import knows neither the catalogue nor the
+    page it came from, and dropping what an earlier fetch recorded would turn
+    a source whose freshness *can* be judged into one whose freshness is
+    unknown.
     """
     with db.connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM source_documents WHERE slug = ?", (slug,))
             existing = cur.fetchone()
 
+            metadata = (
+                page_url, source_url, revision, published_at,
+                catalog_revision, catalog_published_at, catalog_checked_at,
+            )
+
             if existing:
                 cur.execute(
                     "UPDATE source_documents SET "
                     "source_family = ?, title = ?, language = ?, "
-                    "page_url = ?, source_url = ?, "
+                    "page_url = COALESCE(?, page_url), "
+                    "source_url = COALESCE(?, source_url), "
                     "revision = COALESCE(?, revision), "
+                    "published_at = COALESCE(?, published_at), "
+                    "catalog_revision = COALESCE(?, catalog_revision), "
+                    "catalog_published_at = COALESCE(?, catalog_published_at), "
+                    "catalog_checked_at = COALESCE(?, catalog_checked_at), "
                     "updated_at = datetime('now') "
                     "WHERE slug = ?",
-                    (source_family, title, language, page_url, source_url,
-                     revision, slug),
+                    (source_family, title, language, *metadata, slug),
                 )
                 conn.commit()
                 return existing["id"]
 
             cur.execute(
                 "INSERT INTO source_documents "
-                "(slug, source_family, title, language, page_url, source_url, revision) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (slug, source_family, title, language, page_url, source_url, revision),
+                "(slug, source_family, title, language, page_url, source_url, "
+                " revision, published_at, catalog_revision, catalog_published_at, "
+                " catalog_checked_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (slug, source_family, title, language, *metadata),
             )
             doc_id = cur.lastrowid
             conn.commit()
