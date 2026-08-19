@@ -5,13 +5,29 @@ source: which EASA revision was ingested, from which file, and how much it
 contributed.  Each build is qualified as:
 
 ``qualified``
-    every expected source is present, parsed and current;
+    every expected source is present, parsed, and demonstrably the edition
+    EASA publishes;
+``freshness-unknown``
+    everything parsed, but no comparison against what EASA publishes was
+    possible, so nothing establishes that the corpus is up to date;
 ``stale``
     everything parsed, but EASA has published a newer revision of a source;
 ``incomplete``
     an expected source is missing, or a registered one contributed nothing;
 ``failed``
     the corpus holds no entries at all.
+
+``qualified`` is claimed only where a comparison was actually made.  A source
+that carries no revision label, or that was never checked against the EASA
+catalogue, grades ``freshness-unknown`` — which is the ordinary outcome, not
+an edge case: nothing in the ingest path records a catalogue revision yet, so
+a corpus built today says *I cannot show this is current* rather than
+claiming that it is.
+
+The grading itself lives in ``claw_easa.freshness`` and is not repeated here:
+this module settles what is missing or unparsed, defers the edition
+comparison to ``grade_freshness``, and rolls the per-source grades up on that
+module's severity ladder.
 
 Builds are append-only.  ``last_qualified_build`` therefore keeps answering
 with the last good build no matter how many incomplete or failed builds are
@@ -23,37 +39,46 @@ The build history in SQLite records the operational vocabulary defined in
 is ``current``.  ``qualified`` is this module's own older name for that same
 state, so it is translated at the database boundary and nowhere else: a
 manifest — in memory and in the exported JSON — keeps saying ``qualified``.
+Every other status is spelled the same in both vocabularies and crosses that
+boundary unchanged.
 """
 from __future__ import annotations
 
 import json
 import logging
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
 from claw_easa import __version__
 from claw_easa.db.migrations import SCHEMA_VERSION
 from claw_easa.db.sqlite import Database
-from claw_easa.freshness import CURRENT
-from claw_easa.ingest.anomalies import revision_key
+from claw_easa.freshness import (
+    CURRENT,
+    FAILED,
+    FRESHNESS_UNKNOWN,
+    INCOMPLETE,
+    STALE,
+    Freshness,
+    grade_freshness,
+    rollup_status,
+)
 
 log = logging.getLogger(__name__)
 
 MANIFEST_FILE_NAME = "corpus-manifest.json"
 
+#: The manifest's own name for a corpus that is complete and demonstrably
+#: current.  The other four statuses are ``claw_easa.freshness``'s own names,
+#: re-exported above so that callers can keep importing every status this
+#: module reports from this module.
 QUALIFIED = "qualified"
-STALE = "stale"
-INCOMPLETE = "incomplete"
-FAILED = "failed"
 
-#: Worst status wins when a build trips more than one rule.
-_SEVERITY = {QUALIFIED: 0, STALE: 1, INCOMPLETE: 2, FAILED: 3}
+#: The manifest's name for a freshness status, where the two differ.
+_MANIFEST_STATUS = {CURRENT: QUALIFIED}
 
-#: How a status graded here is written to the build history.  Only
-#: ``qualified`` is renamed — ``stale``, ``incomplete`` and ``failed`` already
-#: mean the same thing in both vocabularies.
+#: The inverse, applied when a graded build is written to the build history.
 #:
 #: Note the asymmetry with the migration in ``db.migrations``, which carries a
 #: row *already stored* as 'qualified' over to 'freshness-unknown' instead.
@@ -61,10 +86,13 @@ _SEVERITY = {QUALIFIED: 0, STALE: 1, INCOMPLETE: 2, FAILED: 3}
 #: against the catalogue revisions the caller supplied, while a row written by
 #: an older version is a closed record that can no longer be compared against
 #: anything — nothing in it establishes that it was up to date.
-_RECORDED_STATUS = {QUALIFIED: CURRENT}
+_RECORDED_STATUS = {status: name for name, status in _MANIFEST_STATUS.items()}
 
 #: Source statuses that mean the document never reached a usable parse.
 _UNPARSED_STATUSES = frozenset({"registered", "fetched", "incomplete", "error"})
+
+#: Why a source was graded ``incomplete`` before any edition comparison.
+_NO_ENTRIES = "no-entries"
 
 
 @dataclass(frozen=True)
@@ -90,7 +118,12 @@ class RegulationProvenance:
 
 @dataclass(frozen=True)
 class SourceProvenance:
-    """Where one source in the corpus came from."""
+    """Where one source in the corpus came from.
+
+    ``status`` is the ingestion lifecycle — what the pipeline did with the
+    document.  ``freshness`` is the operational grade of what it holds, which
+    is a different question: a source can be 'parsed' and still be 'stale'.
+    """
     slug: str
     source_family: str
     title: str | None = None
@@ -102,6 +135,14 @@ class SourceProvenance:
     download_url: str | None = None
     entry_count: int = 0
     parsed_at: str | None = None
+    #: This source on the ladder of ``claw_easa.freshness``, as ``qualify``
+    #: graded it, with the basis and detail saying why.  The default is what
+    #: an ungraded source is worth — a source nothing has compared against
+    #: EASA is never assumed to be current, including one read back from a
+    #: manifest recorded before the grade was carried.
+    freshness: str = FRESHNESS_UNKNOWN
+    freshness_basis: str | None = None
+    freshness_detail: str | None = None
     #: What each declared regulation contributed, in the declared order.
     #: Empty for a source that declares no regulation provenance.
     regulations: tuple[RegulationProvenance, ...] = ()
@@ -274,83 +315,128 @@ def collect_provenance(
     ]
 
 
+def _provenance_gaps(source: SourceProvenance) -> list[str]:
+    """Name every regulation and part the build cannot account for.
+
+    A consolidated document carries more than one regulation: a build that
+    lost one of them still holds entries, so only the per-regulation counts
+    can tell that an annex went missing.  One note per gap, each naming the
+    regulation or the part, so the diagnostics say *which* annex is missing
+    rather than only that something is.
+    """
+    gaps = [
+        f"source '{source.slug}' declares regulation "
+        f"'{regulation.identifier}' but holds no entries from it"
+        for regulation in source.regulations
+        if not regulation.entry_count
+    ]
+    gaps += [
+        f"source '{source.slug}' holds part '{part_code}', which no "
+        f"declared regulation claims"
+        for part_code in source.unattributed_parts
+    ]
+    return gaps
+
+
+def grade_source(source: SourceProvenance) -> Freshness:
+    """Grade one source on the ladder of ``claw_easa.freshness``.
+
+    Completeness is settled first: a source that never reached a usable parse
+    is ``incomplete`` whatever revision label it carries, because there is no
+    held edition to compare — calling it current would answer for text the
+    corpus does not hold.
+
+    Everything else is the edition comparison itself, which is
+    ``grade_freshness``'s to make and is not second-guessed here.  It returns
+    ``current`` only where a comparison was actually possible, so a source
+    with no revision on either side grades ``freshness-unknown`` rather than
+    passing by default.
+    """
+    if source.entry_count == 0 or source.status in _UNPARSED_STATUSES:
+        return Freshness(
+            INCOMPLETE,
+            _NO_ENTRIES,
+            f"The source contributed no entries (status '{source.status}').",
+        )
+    return grade_freshness(
+        revision=source.revision, catalog_revision=source.catalog_revision,
+    )
+
+
 def qualify(
     sources: list[SourceProvenance], *, expected_slugs: tuple[str, ...] = (),
 ) -> tuple[str, list[str]]:
-    """Grade a set of sources, returning ``(status, notes)``."""
-    notes: list[str] = []
-    status = QUALIFIED
+    """Grade a set of sources, returning ``(status, notes)``.
 
-    def worsen(candidate: str) -> None:
-        nonlocal status
-        if _SEVERITY[candidate] > _SEVERITY[status]:
-            status = candidate
+    The build takes the worst grade among its sources, so ``qualified``
+    requires every one of them to have been compared against what EASA
+    publishes and found to match.  Two conditions are the build's own rather
+    than any single source's: an expected source that is absent entirely, and
+    a corpus that holds no entries at all.
+    """
+    notes: list[str] = []
+    graded: list[str] = []
 
     present = {s.slug for s in sources}
     for slug in expected_slugs:
         if slug not in present:
             notes.append(f"expected source '{slug}' is not in the corpus")
-            worsen(INCOMPLETE)
+            graded.append(INCOMPLETE)
 
     total_entries = sum(s.entry_count for s in sources)
     if not sources or total_entries == 0:
         notes.append("the corpus holds no entries")
-        worsen(FAILED)
-        return status, notes
-
-    def note_provenance_gaps(source: SourceProvenance) -> None:
-        """Name every regulation and part the build cannot account for.
-
-        A consolidated document carries more than one regulation: a build
-        that lost one of them still holds entries, so only the per-regulation
-        counts can tell that an annex went missing.  One note per gap, each
-        naming the regulation or the part, so the diagnostics say *which*
-        annex is missing rather than only that something is.
-        """
-        for regulation in source.regulations:
-            if regulation.entry_count:
-                continue
-            notes.append(
-                f"source '{source.slug}' declares regulation "
-                f"'{regulation.identifier}' but holds no entries from it"
-            )
-            worsen(INCOMPLETE)
-
-        for part_code in source.unattributed_parts:
-            notes.append(
-                f"source '{source.slug}' holds part '{part_code}', which no "
-                f"declared regulation claims"
-            )
-            worsen(INCOMPLETE)
+        graded.append(FAILED)
+        return _rolled_up(graded), notes
 
     for source in sources:
-        if source.entry_count == 0 or source.status in _UNPARSED_STATUSES:
+        freshness = grade_source(source)
+        graded.append(freshness.status)
+
+        if freshness.basis == _NO_ENTRIES:
             notes.append(
                 f"source '{source.slug}' contributed no entries "
                 f"(status '{source.status}')"
             )
-            worsen(INCOMPLETE)
-            # A source held short of a clean parse *because* an annex went
-            # missing or arrived unclaimed still knows which one: report the
-            # detail before moving on, rather than only the summary line.
-            note_provenance_gaps(source)
-            continue
+        elif freshness.status == STALE:
+            notes.append(
+                f"source '{source.slug}' holds revision '{source.revision}', "
+                f"superseded by the published revision "
+                f"'{source.catalog_revision}'"
+            )
+        elif freshness.status == FRESHNESS_UNKNOWN:
+            notes.append(
+                f"source '{source.slug}' is not shown to be up to date — "
+                f"{freshness.detail}"
+            )
 
-        note_provenance_gaps(source)
+        # Reported whatever the source was graded: one held short of a clean
+        # parse *because* an annex went missing or arrived unclaimed still
+        # knows which one, and an otherwise current source that cannot
+        # account for an annex is not a complete build either.
+        gaps = _provenance_gaps(source)
+        if gaps:
+            notes.extend(gaps)
+            graded.append(INCOMPLETE)
 
-        local, catalog = source.revision, source.catalog_revision
-        if not catalog or not local or local == catalog:
-            continue
-        local_key, catalog_key = revision_key(local), revision_key(catalog)
-        if local_key and catalog_key and local_key > catalog_key:
-            continue
-        notes.append(
-            f"source '{source.slug}' holds revision '{local}', superseded by "
-            f"the published revision '{catalog}'"
-        )
-        worsen(STALE)
+    return _rolled_up(graded), notes
 
-    return status, notes
+
+def _rolled_up(graded: list[str]) -> str:
+    """The worst of *graded*, named as the manifest names it."""
+    status = rollup_status(graded)
+    return _MANIFEST_STATUS.get(status, status)
+
+
+def _with_freshness(source: SourceProvenance) -> SourceProvenance:
+    """*source* carrying the grade ``qualify`` rolls up, so it survives export."""
+    freshness = grade_source(source)
+    return replace(
+        source,
+        freshness=freshness.status,
+        freshness_basis=freshness.basis,
+        freshness_detail=freshness.detail,
+    )
 
 
 def build_manifest(
@@ -361,10 +447,14 @@ def build_manifest(
 ) -> BuildManifest:
     """Qualify the corpus as it currently stands.
 
-    *catalog_revisions* maps a slug to the revision EASA publishes today;
-    without it staleness cannot be assessed and is not claimed.
+    *catalog_revisions* maps a slug to the revision EASA publishes today.
+    Without it nothing can be compared, so the build is graded
+    ``freshness-unknown``: neither staleness nor currency is claimed.
     """
-    sources = collect_provenance(db, catalog_revisions=catalog_revisions)
+    sources = [
+        _with_freshness(source)
+        for source in collect_provenance(db, catalog_revisions=catalog_revisions)
+    ]
     status, notes = qualify(sources, expected_slugs=expected_slugs)
     now = datetime.now(timezone.utc)
     return BuildManifest(

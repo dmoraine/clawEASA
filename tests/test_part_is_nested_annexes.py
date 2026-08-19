@@ -62,6 +62,7 @@ CONTINUING_AIRWORTHINESS = FIXTURES / "continuing_airworthiness_part_m_camo.xml"
 
 DOC_TITLE = "Easy Access Rules for Information Security"
 SLUG = "information-security"
+REVISION = "December 2025"
 
 IMPLEMENTING = "(EU) 2023/203"
 DELEGATED = "(EU) 2022/1645"
@@ -126,7 +127,7 @@ def _located(doc: ParsedDocument, ref: str) -> tuple[str, str]:
 
 def _ingest(db: Database, fixture: Path = NESTED) -> int:
     doc_id = upsert_source_document_from_values(
-        db, slug=SLUG, source_family="ear", title=DOC_TITLE, revision="December 2025",
+        db, slug=SLUG, source_family="ear", title=DOC_TITLE, revision=REVISION,
     )
     record_source_regulations(db, doc_id, regulations_for(SLUG))
     CanonicalPersister(db).persist_document(doc_id, _parse(fixture))
@@ -270,7 +271,7 @@ def test_the_two_regulations_do_not_share_their_parts(db):
 def test_a_fully_attributed_nested_build_qualifies(db):
     _ingest(db)
 
-    manifest = build_manifest(db)
+    manifest = build_manifest(db, catalog_revisions={SLUG: REVISION})
 
     assert manifest.status == "qualified", (
         f"a Part-IS build whose every annex is attributed did not qualify: "

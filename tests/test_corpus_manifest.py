@@ -3,10 +3,17 @@
 A build of the corpus has to say what it was built from and whether it is fit
 to answer from: which sources, which EASA revision of each, how many entries
 they contributed.  The qualification statuses are ``qualified``,
-``incomplete``, ``stale`` and ``failed``.
+``freshness-unknown``, ``incomplete``, ``stale`` and ``failed``.
 
-The load-bearing rule is the last one tested here: a build that did not
-qualify must never displace the last one that did.
+``qualified`` is claimed only where a comparison against what EASA publishes
+was actually made, so every test that expects it hands ``build_manifest`` the
+catalogue revision to compare against.  Without one nothing establishes that
+the corpus is current and the build grades ``freshness-unknown`` — the
+ordinary outcome for a build nobody checked, pinned in
+``TestFreshnessUnknown``.
+
+The load-bearing rule is the one ``TestPersistence`` tests: a build that did
+not qualify must never displace the last one that did.
 
 The build history in SQLite records the operational vocabulary — a qualified
 build is stored as ``current`` — so ``TestRecordedStatus`` pins what crosses
@@ -80,6 +87,12 @@ def _ingest(db: Database, slug: str, *, revision: str | None = None,
     return doc_id
 
 
+#: What EASA publishes for the source ``_ingest`` registers by default — the
+#: same revision, so a build handed this one grades ``qualified``.  A build
+#: that expects ``qualified`` has to be handed something to compare against.
+CATALOG = {"air-ops": "March 2026"}
+
+
 class TestQualification:
     def test_a_complete_current_corpus_qualifies(self, db):
         _ingest(db, "air-ops", revision="March 2026")
@@ -101,9 +114,14 @@ class TestQualification:
                    for note in manifest.notes)
 
     def test_expected_source_absent_makes_the_build_incomplete(self, db):
+        """The absent source is the only fault: the present one is current."""
         _ingest(db, "air-ops", revision="March 2026")
 
-        manifest = build_manifest(db, expected_slugs=("air-ops", "information-security"))
+        manifest = build_manifest(
+            db,
+            catalog_revisions={"air-ops": "March 2026"},
+            expected_slugs=("air-ops", "information-security"),
+        )
 
         assert manifest.status == "incomplete"
         assert any("information-security" in note for note in manifest.notes)
@@ -112,7 +130,7 @@ class TestQualification:
         _ingest(db, "air-ops", revision="March 2026")
         _ingest(db, "mystery-ear", entries=False)
 
-        manifest = build_manifest(db)
+        manifest = build_manifest(db, catalog_revisions={"air-ops": "March 2026"})
 
         assert manifest.status == "incomplete"
         assert any("mystery-ear" in note for note in manifest.notes)
@@ -125,21 +143,75 @@ class TestQualification:
         assert manifest.status == "failed"
 
 
+#: Five sources carrying no revision label, which is what the ingest path
+#: registers today: nothing in it reads the EASA catalogue.
+UNLABELLED_SLUGS = (
+    "air-ops",
+    "aircrew",
+    "basic-regulation",
+    "information-security",
+    "initial-airworthiness",
+)
+
+
+class TestFreshnessUnknown:
+    """The ordinary outcome: a whole corpus nobody compared against EASA.
+
+    Every source parsed and contributed entries, so nothing is missing — but
+    no source holds a revision label and no catalogue was supplied, so no
+    edition comparison was possible anywhere.  The build has to keep saying
+    so at every layer it crosses — the manifest, the build history, the
+    exported JSON — rather than passing as qualified by default, and it must
+    not become the build ``last_qualified_build`` offers.
+    """
+
+    def test_a_corpus_nothing_compared_grades_freshness_unknown(self, db, tmp_path):
+        for slug in UNLABELLED_SLUGS:
+            _ingest(db, slug)
+
+        manifest = build_manifest(db)
+
+        assert manifest.status == "freshness-unknown"
+        assert len(manifest.sources) == 5
+        assert manifest.entry_count == 5, "a source contributed nothing"
+        assert [s.freshness for s in manifest.sources] == ["freshness-unknown"] * 5
+
+        recorded = record_build(db, manifest)
+
+        row = db.fetch_one(
+            "SELECT status FROM corpus_builds WHERE build_id = ?", (recorded.build_id,)
+        )
+        assert row["status"] == "freshness-unknown", (
+            f"an uncompared build is recorded as {row['status']!r}"
+        )
+        assert last_qualified_build(db) is None, (
+            "a build nothing compared against EASA is offered as the last "
+            "qualified one"
+        )
+
+        payload = json.loads(export_manifest(db, tmp_path / "m.json").read_text())
+
+        assert payload["current"]["status"] == "freshness-unknown"
+        assert payload["last_qualified"] is None
+
+
 class TestPersistence:
     def test_recorded_build_is_the_latest(self, db):
         _ingest(db, "air-ops", revision="March 2026")
-        recorded = record_build(db, build_manifest(db))
+        recorded = record_build(
+            db, build_manifest(db, catalog_revisions=CATALOG),
+        )
 
         assert latest_build(db).build_id == recorded.build_id
         assert last_qualified_build(db).build_id == recorded.build_id
 
     def test_incomplete_build_never_replaces_the_last_qualified_one(self, db):
         _ingest(db, "air-ops", revision="March 2026")
-        qualified = record_build(db, build_manifest(db))
+        qualified = record_build(db, build_manifest(db, catalog_revisions=CATALOG))
         assert qualified.status == "qualified"
 
         _ingest(db, "mystery-ear", entries=False)
-        incomplete = record_build(db, build_manifest(db))
+        incomplete = record_build(db, build_manifest(db, catalog_revisions=CATALOG))
         assert incomplete.status == "incomplete"
 
         assert latest_build(db).build_id == incomplete.build_id
@@ -150,14 +222,14 @@ class TestPersistence:
 
     def test_failed_build_never_replaces_the_last_qualified_one(self, db):
         _ingest(db, "air-ops", revision="March 2026")
-        qualified = record_build(db, build_manifest(db))
+        qualified = record_build(db, build_manifest(db, catalog_revisions=CATALOG))
 
         with db.connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM regulation_entries")
             conn.commit()
 
-        failed = record_build(db, build_manifest(db))
+        failed = record_build(db, build_manifest(db, catalog_revisions=CATALOG))
         assert failed.status == "failed"
         assert last_qualified_build(db).build_id == qualified.build_id
 
@@ -259,10 +331,10 @@ class TestRecordedStatus:
 class TestJSONExport:
     def test_export_writes_current_and_last_qualified(self, db, tmp_path):
         _ingest(db, "air-ops", revision="March 2026")
-        qualified = record_build(db, build_manifest(db))
+        qualified = record_build(db, build_manifest(db, catalog_revisions=CATALOG))
 
         _ingest(db, "mystery-ear", entries=False)
-        incomplete = record_build(db, build_manifest(db))
+        incomplete = record_build(db, build_manifest(db, catalog_revisions=CATALOG))
 
         path = export_manifest(db, tmp_path / "corpus-manifest.json")
         payload = json.loads(path.read_text())

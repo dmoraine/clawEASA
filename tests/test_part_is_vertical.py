@@ -375,7 +375,7 @@ def test_parts_are_queryable_by_regulation(db):
 def test_the_manifest_keeps_the_two_regulations_apart(db):
     _ingest(db)
 
-    manifest = build_manifest(db)
+    manifest = build_manifest(db, catalog_revisions={SLUG: REVISION})
     source = next(s for s in manifest.sources if s.slug == SLUG)
 
     assert [r.identifier for r in source.regulations] == [IMPLEMENTING, DELEGATED], (
@@ -491,7 +491,7 @@ def test_a_source_without_declared_regulations_still_qualifies(db):
     )
     CanonicalPersister(db).persist_document(doc_id, _parse())
 
-    manifest = build_manifest(db)
+    manifest = build_manifest(db, catalog_revisions={"air-ops": "March 2026"})
 
     assert manifest.status == "qualified", (
         f"a source that declares no regulations was held back: {manifest.notes}"
