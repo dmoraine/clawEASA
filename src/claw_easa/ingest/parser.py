@@ -139,8 +139,30 @@ class EASAOfficeXMLParser:
     # and Regulation (EU) 2023/203 uses a dotted part code, ANNEX I
     # (Part-IS.I.OR).  A part code that must start with a letter drops the
     # numeric annexes onto whichever part precedes them.
-    PART_PATTERN = re.compile(
-        r'ANNEX\s+([IVX]+[a-z]?)\s*\(Part-([A-Z0-9][A-Z0-9.]*)\)',
+    #
+    # The annex label is optional.  A regulation stating a single annex does
+    # not number it: Delegated Regulation (EU) 2022/1645 heads its one annex
+    # 'ANNEX — INFORMATION SECURITY — ORGANISATION REQUIREMENTS
+    # [PART-IS.D.OR]'.  Requiring a numeral reads no part out of it.
+    ANNEX_HEADING_PATTERN = re.compile(
+        r'^ANNEX(?:\s+([IVX]+[a-z]?))?\b',
+        re.IGNORECASE,
+    )
+    # How an annex heading names the part it states.  Air Ops parenthesises
+    # the marker directly after the numeral — 'ANNEX III (Part-ORO)' — while
+    # the Information Security rulebook brackets it after the annex title, and
+    # spells 'Part' in upper case: 'ANNEX I — INFORMATION SECURITY —
+    # AUTHORITY REQUIREMENTS [PART-IS.AR]'.  A part code may carry dots
+    # (IS.I.OR) or a slash (ATM/ANS.AR).
+    #
+    # The marker has to *close* the heading.  That is what separates an annex
+    # a document states from one it only amends: 'ANNEX III — INFORMATION
+    # SECURITY — ANNEXES VI (Part-ARA) and VII (Part-ORA) to Regulation (EU)
+    # No 1178/2011' names two parts mid-heading and states neither of them —
+    # reading a part out of it would invent an ARA and an ORA annex that the
+    # Information Security regulations do not contain.
+    PART_MARKER_PATTERN = re.compile(
+        r'[(\[]\s*Part[-\s]\s*([A-Z0-9][A-Z0-9./]*?)\s*[)\]][\s.;:–—-]*$',
         re.IGNORECASE,
     )
     SUBPART_PATTERN = re.compile(
@@ -315,11 +337,7 @@ class EASAOfficeXMLParser:
     def _looks_like_article_structured(
         self, paragraphs: list[OfficeXMLParagraph], title: str,
     ) -> bool:
-        part_hits = sum(
-            1 for p in paragraphs
-            if p.style == 'Heading1' and self.PART_PATTERN.search(p.text)
-        )
-        if part_hits >= 1:
+        if self._part_headings(paragraphs):
             return False
         article_hits = sum(
             1 for p in paragraphs
@@ -335,11 +353,7 @@ class EASAOfficeXMLParser:
         headings instead of the ANNEX -> SUBPART -> SECTION hierarchy used by
         Air Ops and similar rulebooks.
         """
-        part_hits = sum(
-            1 for p in paragraphs
-            if p.style == 'Heading1' and self.PART_PATTERN.search(p.text)
-        )
-        if part_hits:
+        if self._part_headings(paragraphs):
             return False
 
         cs_hits = sum(1 for p in paragraphs if self._identify_cs_entry(p))
@@ -348,10 +362,8 @@ class EASAOfficeXMLParser:
     # ── Cover regulation (hybrid mode) ──────────────────────────────────
 
     def _first_part_annex_idx(self, paragraphs: list[OfficeXMLParagraph]) -> int:
-        for idx, para in enumerate(paragraphs):
-            if para.style == 'Heading1' and self.PART_PATTERN.search(para.text):
-                return idx
-        return len(paragraphs)
+        headings = self._part_headings(paragraphs)
+        return headings[0][0] if headings else len(paragraphs)
 
     def _has_cover_regulation(self, paragraphs: list[OfficeXMLParagraph]) -> bool:
         first_part_idx = self._first_part_annex_idx(paragraphs)
@@ -464,15 +476,70 @@ class EASAOfficeXMLParser:
 
     # ── Part-structured parsing ─────────────────────────────────────────
 
+    def _part_heading(self, para: OfficeXMLParagraph) -> tuple[str, str] | None:
+        """The ``(annex_label, part_code)`` an annex heading states, or ``None``.
+
+        The annex label is ``''`` where the regulation states a single,
+        unnumbered annex.
+        """
+        if not para.style.startswith('Heading'):
+            return None
+        text = re.sub(r'\s+', ' ', para.text.replace('\xa0', ' ')).strip()
+        if 'APPENDIX' in text.upper():
+            return None
+        annex_match = self.ANNEX_HEADING_PATTERN.match(text)
+        if not annex_match:
+            return None
+        marker = self.PART_MARKER_PATTERN.search(text)
+        if not marker:
+            return None
+        return annex_match.group(1) or '', marker.group(1)
+
+    def _part_heading_style(self, paragraphs: list[OfficeXMLParagraph]) -> str | None:
+        """The heading style at which this document states its annex parts.
+
+        Air Ops, Aircrew and the continuing-airworthiness rulebook head an
+        annex at ``Heading1``.  The Information Security rulebook consolidates
+        two regulations, spends ``Heading1`` on naming each of them, and heads
+        its annexes one level down at ``Heading2`` — so a level fixed at
+        ``Heading1`` reads no part at all out of it, and the document falls
+        through to article parsing as one undifferentiated 'ARTICLES' part
+        that no regulation can be said to state.
+
+        The level is therefore read off the document: the shallowest heading
+        style that carries an annex heading naming a part.  Deeper headings
+        that also name one are left to the subpart and entry rules, which is
+        where a part's own subdivisions belong.
+        """
+        levels: dict[str, int] = {}
+        for para in paragraphs:
+            if self._part_heading(para) is None:
+                continue
+            levels.setdefault(para.style, para.level or 99)
+        if not levels:
+            return None
+        return min(levels, key=lambda style: (levels[style], style))
+
+    def _part_headings(
+        self, paragraphs: list[OfficeXMLParagraph],
+    ) -> list[tuple[int, str, str, str]]:
+        """``(index, annex_label, part_code, heading_text)`` per annex part."""
+        style = self._part_heading_style(paragraphs)
+        if style is None:
+            return []
+        headings: list[tuple[int, str, str, str]] = []
+        for idx, para in enumerate(paragraphs):
+            if para.style != style:
+                continue
+            heading = self._part_heading(para)
+            if heading is None:
+                continue
+            annex, code = heading
+            headings.append((idx, annex, code, para.text))
+        return headings
+
     def _parse_parts(self, paragraphs: list[OfficeXMLParagraph]) -> list[ParsedPart]:
-        part_indices: list[tuple[int, str, str, str]] = []
-        for i, para in enumerate(paragraphs):
-            if para.style == 'Heading1':
-                match = self.PART_PATTERN.search(para.text)
-                if match and 'Appendix' not in para.text:
-                    annex = match.group(1)
-                    code = match.group(2)
-                    part_indices.append((i, annex, code, para.text))
+        part_indices = self._part_headings(paragraphs)
 
         parts: list[ParsedPart] = []
         for idx, (start, annex, code, title) in enumerate(part_indices):

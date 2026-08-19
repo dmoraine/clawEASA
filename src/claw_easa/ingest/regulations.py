@@ -6,10 +6,12 @@ and Delegated Regulation (EU) 2022/1645.  They cover different organisations,
 are amended on their own timelines, and each states its own annexes — so a
 citation has to name the one that actually states the rule.
 
-The annex label cannot recover that distinction after the fact: both
-regulations number their first annex ``ANNEX I``.  The attribution is
-therefore declared here, against the part code EASA gives each annex, rather
-than guessed at parse time from the position of a heading.
+The annex label cannot recover that distinction after the fact.  The
+implementing regulation numbers its annexes ``ANNEX I`` and ``ANNEX II``; the
+delegated regulation states a single annex and does not number it at all.  A
+label is therefore neither unique across the document nor always present.  The
+attribution is declared here instead, against the part code EASA gives each
+annex, rather than guessed at parse time from the position of a heading.
 
 The declaration is opt-in.  A source that is not listed contributes no
 regulation provenance and is not held to any — ``regulations_for`` answers
@@ -48,8 +50,8 @@ class Regulation:
 
 #: Regulation (EU) 2023/203 — information security management for the
 #: organisations and competent authorities covered by the implementing acts.
-#: ANNEX I (Part-IS.I.OR) states the organisation requirements, ANNEX II
-#: (Part-IS.AR) the competent authority requirements.
+#: ANNEX I [PART-IS.AR] states the competent authority requirements, ANNEX II
+#: [PART-IS.I.OR] the organisation requirements.
 INFORMATION_SECURITY_IMPLEMENTING = Regulation(
     identifier="(EU) 2023/203",
     title="Commission Implementing Regulation (EU) 2023/203",
@@ -58,8 +60,9 @@ INFORMATION_SECURITY_IMPLEMENTING = Regulation(
 )
 
 #: Regulation (EU) 2022/1645 — information security management for the
-#: organisations covered by the delegated acts.  ANNEX I (Part-IS.D.OR)
-#: states its organisation requirements.
+#: organisations covered by the delegated acts.  It states one annex, headed
+#: 'ANNEX ... [PART-IS.D.OR]' with no numeral, holding its organisation
+#: requirements.
 INFORMATION_SECURITY_DELEGATED = Regulation(
     identifier="(EU) 2022/1645",
     title="Commission Delegated Regulation (EU) 2022/1645",

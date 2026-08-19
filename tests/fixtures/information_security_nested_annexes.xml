@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Easy Access Rules for Information Security, in the shape EASA actually
+  publishes it.  Anonymised: every heading below is a structural label or a
+  rule reference; all body text is written for this fixture.
+
+  Two things about this layout defeat a parser that expects the Air Ops shape
+  ('ANNEX III (Part-ORO)' at Heading1):
+
+  - The document consolidates two regulations, so Heading1 is spent naming
+    each of them and the annexes are headed one level down, at Heading2.
+  - The part marker is bracketed and closes the heading after the annex
+    title — '[PART-IS.AR]' — rather than following the numeral in
+    parentheses.  The delegated regulation states a single annex and does not
+    number it at all: 'ANNEX — ... [PART-IS.D.OR]'.
+
+  Read with the level fixed at Heading1, no part is found, the document falls
+  through to article parsing, and every rule in it lands in one 'ARTICLES'
+  part that neither regulation can be said to state.
+
+  ANNEX III and ANNEX IV below are the other trap: they are amendment
+  annexes.  They name parts of *other* regulations mid-heading and state
+  none of their own, so a rule that reads a part marker anywhere in the
+  heading invents a Part-ARA, a Part-ORA and a Part-21 annex that the
+  Information Security regulations do not contain.
+-->
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+      <w:r><w:t>Easy Access Rules for Information Security</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Table of contents</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>IS.AR.200 Information security management system</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Implementing Regulation (EU) 2023/203</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>Cover Regulation to Implementing Regulation (EU) 2023/203</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3CR"/></w:pPr>
+      <w:r><w:t>Article 1 – Subject matter</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>This fixture stands in for the cover regulation text of the implementing act.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3CR"/></w:pPr>
+      <w:r><w:t>Article 2 – Scope</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>This fixture stands in for the scope article of the implementing act.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>ANNEX I — INFORMATION SECURITY — AUTHORITY REQUIREMENTS [PART-IS.AR]</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.AR.200 Information security management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Stand-in text for the competent authority management system requirement.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4GM"/></w:pPr>
+      <w:r><w:t>GM1 IS.AR.200 Information security management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Stand-in guidance for the competent authority management system requirement.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>ANNEX II — INFORMATION SECURITY — ORGANISATION REQUIREMENTS [PART-IS.I.OR]</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.I.OR.200 Information security management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Stand-in text for the organisation management system requirement of the implementing act.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4AMC"/></w:pPr>
+      <w:r><w:t>AMC1 IS.I.OR.200 Information security management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Stand-in acceptable means of compliance for the organisation management system requirement.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.I.OR.205 Information security risk assessment</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Stand-in text for the organisation risk assessment requirement.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>ANNEX III — INFORMATION SECURITY — ANNEXES VI (Part-ARA) and VII (Part-ORA) to Regulation (EU) No 1178/2011</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>ANNEX IV — INFORMATION SECURITY — Annex I (Part 21) to Regulation (EU) No 748/2012</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Delegated Regulation (EU) 2022/1645</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>Cover Regulation to Delegated Regulation (EU) 2022/1645</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3CR"/></w:pPr>
+      <w:r><w:t>Article 1 – Subject matter</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>This fixture stands in for the cover regulation text of the delegated act.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>ANNEX — INFORMATION SECURITY — ORGANISATION REQUIREMENTS [PART-IS.D.OR]</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.D.OR.200 Information security management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Stand-in text for the organisation management system requirement of the delegated act.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4AMC"/></w:pPr>
+      <w:r><w:t>AMC1 IS.D.OR.200 Information security management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Stand-in acceptable means of compliance for the delegated organisation requirement.</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>

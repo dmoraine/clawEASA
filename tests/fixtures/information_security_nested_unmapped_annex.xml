@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The nested, bracketed annex layout of the Information Security rulebook,
+  carrying an annex that neither contributing regulation declares.
+  Anonymised: structural labels and rule references only, body text written
+  for this fixture.
+
+  Pairs with information_security_unmapped_annex.xml, which pins the same
+  failure in the Air Ops annex layout.  The point of repeating it here is
+  that generalising *how* an annex heading is recognised must not quietly
+  change *whether* an unclaimed one is noticed: an annex the declaration
+  does not claim has to be parsed as a part and reported unattributed, not
+  dropped for failing to match and not filed under whichever regulation
+  happens to precede it.
+-->
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+      <w:r><w:t>Easy Access Rules for Information Security</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Implementing Regulation (EU) 2023/203</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>ANNEX II — INFORMATION SECURITY — ORGANISATION REQUIREMENTS [PART-IS.I.OR]</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.I.OR.200 Information security management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Stand-in text for the organisation management system requirement.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>ANNEX X — INFORMATION SECURITY — ORGANISATION REQUIREMENTS [PART-IS.Z.OR]</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.Z.OR.200 Information security management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Stand-in text for a requirement under an annex no declared regulation claims.</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>
