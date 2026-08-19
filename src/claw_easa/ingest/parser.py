@@ -88,6 +88,26 @@ class ParsedPart:
 
 
 @dataclass
+class ParsedCoverRegulation:
+    """The cover-regulation articles a document states for one regulation.
+
+    A consolidated rulebook publishes a cover regulation per regulation it
+    holds — 'Article 1 Subject matter', 'Article 2 Scope' — and states them
+    wherever its layout puts them, including after the annexes of the
+    regulation before.  They are not an annex and EASA gives them no part
+    code, so they are held here rather than forced into the part hierarchy.
+
+    ``regulation`` is the identifier the *document* names for the block, read
+    off the heading that introduces it ('Cover Regulation to Implementing
+    Regulation (EU) 2023/203').  ``None`` where no heading names one: a block
+    is never attributed by proximity.
+    """
+    regulation: str | None
+    title: str
+    entries: list[ParsedEntry] = field(default_factory=list)
+
+
+@dataclass
 class ParsedDocument:
     """Result of parsing an EASA Easy Access Rules document."""
     title: str = ''
@@ -95,6 +115,13 @@ class ParsedDocument:
     parser_mode: str = ''
     parts: list[ParsedPart] = field(default_factory=list)
     style_counts: dict[str, int] = field(default_factory=dict)
+    #: Cover-regulation blocks the document states, in document order.  Kept
+    #: beside the parts rather than among them: a cover regulation is not an
+    #: annex, and inventing a part for it would put a code in the corpus that
+    #: no regulation states.  In ``hybrid`` mode the same articles are also
+    #: filed as a 'REGULATION' part, which is the shape that mode has always
+    #: had and what persistence reads.
+    cover_regulations: list[ParsedCoverRegulation] = field(default_factory=list)
 
 
 # ── Parser ──────────────────────────────────────────────────────────────────
@@ -111,7 +138,10 @@ class EASAOfficeXMLParser:
     - ``article-structured``: documents organised by Articles (e.g. basic-regulation)
     - ``cs-structured``: certification specification EARs organised by CS headings
       rather than ANNEX / Part-XXX headings (e.g. CS-MMEL, CS-GEN-MMEL)
-    - ``hybrid``: documents with both cover-regulation articles *and* Part annexes
+    - ``hybrid``: documents with both cover-regulation articles *and* Part annexes.
+      A consolidated rulebook states one cover regulation per regulation it
+      publishes, and states them wherever its own layout puts them — before
+      the annexes, and again after them.
     """
 
     NAMESPACES = {
@@ -230,6 +260,24 @@ class EASAOfficeXMLParser:
         r'^((?:GM|AMC)\d+\s+Article\s+\d+.*)',
         re.IGNORECASE,
     )
+    # A cover-regulation article sits at whatever depth its document needs.
+    # Air Ops heads one at 'Heading2CR'; a rulebook consolidating two
+    # regulations spends a level on naming each of them and heads its cover
+    # articles one level down, at 'Heading3CR'.  A style fixed at one level
+    # reads no article out of the other, and every article of that cover
+    # regulation is either dropped or appended to the body of whichever annex
+    # rule precedes it — guidance of one regulation presented as the text of
+    # another.
+    COVER_ARTICLE_STYLE_PATTERN = re.compile(r'^Heading[1-7]CR$')
+    # How a heading names the regulation the material under it belongs to:
+    # 'Implementing Regulation (EU) 2023/203', 'Cover Regulation to Delegated
+    # Regulation (EU) 2022/1645'.  'No' is kept because EASA cites the older
+    # acts with it — '(EU) No 1178/2011' — and an identifier that drops it
+    # matches no declaration.
+    REGULATION_IDENTIFIER_PATTERN = re.compile(
+        r'\((EU|EC)\)\s*(No\s*)?(\d{4}/\d+)',
+        re.IGNORECASE,
+    )
     ANNEX_I_HEADING_PATTERN = re.compile(
         r'^ANNEX\s+I\s*[–-]\s*(.*)',
         re.IGNORECASE,
@@ -255,6 +303,11 @@ class EASAOfficeXMLParser:
         root = self._load_root(xml_path)
         paragraphs = self._extract_paragraphs(root)
         title = document_title or xml_path.stem
+        # Read in every mode, and read before the annexes are cut: a cover
+        # regulation the document states between or after its annexes is
+        # otherwise appended to the body of whichever annex rule precedes it,
+        # which files the text of one regulation under another.
+        cover_regulations = self._parse_cover_regulations(paragraphs)
         if self._looks_like_article_structured(paragraphs, title):
             parts = self._parse_article_structured(paragraphs)
             parser_mode = 'article-structured'
@@ -262,10 +315,9 @@ class EASAOfficeXMLParser:
             parts = self._parse_cs_structured(paragraphs, title)
             parser_mode = 'cs-structured'
         else:
-            annex_parts = self._parse_parts(paragraphs)
+            annex_parts = self._parse_parts(paragraphs, self._cover_stops(paragraphs))
             if self._has_cover_regulation(paragraphs):
-                cover_parts = self._parse_cover_regulation(paragraphs)
-                parts = cover_parts + annex_parts
+                parts = self._parse_cover_regulation(paragraphs) + annex_parts
                 parser_mode = 'hybrid'
             else:
                 parts = annex_parts
@@ -286,6 +338,7 @@ class EASAOfficeXMLParser:
             paragraph_count=len(paragraphs),
             parser_mode=parser_mode,
             style_counts=dict(Counter(p.style for p in paragraphs)),
+            cover_regulations=cover_regulations,
         )
 
     # ── XML loading ─────────────────────────────────────────────────────
@@ -374,6 +427,14 @@ class EASAOfficeXMLParser:
         return headings[0][0] if headings else len(paragraphs)
 
     def _has_cover_regulation(self, paragraphs: list[OfficeXMLParagraph]) -> bool:
+        """Whether hybrid mode applies: a cover regulation before the annexes.
+
+        Deliberately the layout hybrid mode was written for — ``Heading2CR``
+        articles ahead of the first annex — so that a document already parsed
+        as hybrid keeps exactly the parts it had.  Cover material this does not
+        cover is not dropped: it is read into ``cover_regulations`` instead of
+        being turned into a part code no regulation states.
+        """
         first_part_idx = self._first_part_annex_idx(paragraphs)
         cr_count = sum(
             1 for p in paragraphs[:first_part_idx]
@@ -381,17 +442,35 @@ class EASAOfficeXMLParser:
         )
         return cr_count >= 3
 
-    def _identify_cover_entry(self, para: OfficeXMLParagraph) -> dict[str, str] | None:
-        if para.style == 'Heading2CR':
-            match = self.BASIC_ARTICLE_PATTERN.match(para.text)
-            if match:
-                return {
-                    'entry_type': 'IR',
-                    'entry_ref': f'Article {match.group(1)}',
-                    'title': match.group(2).strip() or para.text,
-                }
+    def _cover_article(self, para: OfficeXMLParagraph) -> dict[str, str] | None:
+        """The cover-regulation article a ``Heading<n>CR`` paragraph states."""
+        if not self.COVER_ARTICLE_STYLE_PATTERN.match(para.style):
+            return None
+        match = self.BASIC_ARTICLE_PATTERN.match(para.text.strip())
+        if not match:
+            return None
+        return {
+            'entry_type': 'IR',
+            'entry_ref': f'Article {match.group(1)}',
+            'title': match.group(2).strip() or para.text.strip(),
+        }
 
-        if para.style in ('Heading3GM', 'Heading3IR', 'Heading3AMC'):
+    def _identify_cover_entry(self, para: OfficeXMLParagraph) -> dict[str, str] | None:
+        # An annex heading states a part, never a cover article: reading one as
+        # cover material would file a whole annex under the cover regulation
+        # that precedes it.
+        if self._part_heading(para) is not None:
+            return None
+
+        article = self._cover_article(para)
+        if article:
+            return article
+
+        # The soft law of a cover article sits one level below whatever level
+        # the article itself is at, so these styles are matched by shape rather
+        # than listed: 'GM1 Article 4' is guidance on a cover article wherever
+        # the document puts it.
+        if self.ENTRY_STYLE_PATTERN.match(para.style):
             text = para.text.strip()
             gm_match = self.COVER_GM_PATTERN.match(text)
             if gm_match:
@@ -413,35 +492,178 @@ class EASAOfficeXMLParser:
 
         return None
 
-    def _parse_cover_regulation(self, paragraphs: list[OfficeXMLParagraph]) -> list[ParsedPart]:
-        first_part_idx = self._first_part_annex_idx(paragraphs)
+    def _regulation_heading(self, para: OfficeXMLParagraph) -> str | None:
+        """The regulation identifier a heading names, or ``None``.
 
-        first_cr_idx = None
-        for idx in range(first_part_idx):
-            para = paragraphs[idx]
-            if para.style == 'Heading2CR' and self.BASIC_ARTICLE_PATTERN.match(para.text):
-                first_cr_idx = idx
-                break
-        if first_cr_idx is None:
-            return []
+        Only a heading that is not itself an annex heading counts.  'ANNEX III
+        \u2014 INFORMATION SECURITY \u2014 ANNEXES VI (Part-ARA) and VII (Part-ORA) to
+        Regulation (EU) No 1178/2011' names the regulation this document
+        *amends*; taking that as the regulation stating what follows would
+        attribute material to a regulation this document does not publish.
+        """
+        if not para.style.startswith('Heading'):
+            return None
+        text = re.sub(r'\s+', ' ', para.text.replace('\xa0', ' ')).strip()
+        if text.upper().startswith('ANNEX'):
+            return None
+        match = self.REGULATION_IDENTIFIER_PATTERN.search(text)
+        if not match:
+            return None
+        number = 'No ' if match.group(2) else ''
+        return f'({match.group(1).upper()}) {number}{match.group(3)}'
 
-        entry_positions: list[tuple[int, dict[str, str]]] = []
-        for idx in range(first_cr_idx, first_part_idx):
-            info = self._identify_cover_entry(paragraphs[idx])
+    def _regulation_boundaries(
+        self, paragraphs: list[OfficeXMLParagraph],
+    ) -> list[tuple[int, str, str]]:
+        """``(index, identifier, heading text)`` per regulation-naming heading."""
+        boundaries: list[tuple[int, str, str]] = []
+        for idx, para in enumerate(paragraphs):
+            identifier = self._regulation_heading(para)
+            if identifier is None:
+                continue
+            text = re.sub(r'\s+', ' ', para.text.replace('\xa0', ' ')).strip()
+            boundaries.append((idx, identifier, text))
+        return boundaries
+
+    def _cover_entry_positions(
+        self, paragraphs: list[OfficeXMLParagraph],
+    ) -> list[tuple[int, dict[str, str]]]:
+        """``(index, entry)`` per cover-regulation heading, document-wide."""
+        positions: list[tuple[int, dict[str, str]]] = []
+        for idx, para in enumerate(paragraphs):
+            info = self._identify_cover_entry(para)
             if info:
-                entry_positions.append((idx, info))
+                positions.append((idx, info))
+        return positions
 
-        if not entry_positions:
+    def _governing_regulation(
+        self, boundaries: list[tuple[int, str, str]], idx: int,
+    ) -> tuple[str | None, str | None]:
+        """The regulation the document states the paragraph at *idx* under."""
+        governing: tuple[str | None, str | None] = (None, None)
+        for boundary_idx, identifier, text in boundaries:
+            if boundary_idx > idx:
+                break
+            governing = (identifier, text)
+        return governing
+
+    def _cover_blocks(
+        self, paragraphs: list[OfficeXMLParagraph],
+    ) -> list[tuple[int, int, str | None, str | None]]:
+        """``(start, end, identifier, heading)`` per cover-regulation block.
+
+        A block is opened by a ``Heading<n>CR`` article \u2014 the style EASA
+        reserves for cover-regulation text \u2014 and runs to the next annex
+        heading or the next block.  Only that style opens one: a 'GM1 Article
+        4' heading is collected as cover guidance where it falls inside a
+        block, and left to the annex that states it where it does not, so an
+        annex is never cut short by a heading that merely cites an article.
+
+        The start is pulled back to the heading that names the regulation
+        ('Delegated Regulation (EU) 2022/1645') where one stands between the
+        previous annex and the article, so that heading does not stay behind
+        in the body of the annex before it.
+        """
+        article_indices = [
+            idx for idx, para in enumerate(paragraphs) if self._cover_article(para)
+        ]
+        if not article_indices:
             return []
 
-        all_entries: list[ParsedEntry] = []
-        for order, (start, info) in enumerate(entry_positions):
-            end = entry_positions[order + 1][0] if order + 1 < len(entry_positions) else first_part_idx
-            all_entries.append(self._parse_cover_entry(paragraphs, info, order + 1, start, end))
+        part_indices = [idx for idx, _annex, _code, _text in self._part_headings(paragraphs)]
+        boundaries = self._regulation_boundaries(paragraphs)
+
+        opens: list[tuple[int, int, str | None, str | None]] = []
+        for idx in article_indices:
+            identifier, heading = self._governing_regulation(boundaries, idx)
+            previous_part = max((pos for pos in part_indices if pos < idx), default=-1)
+            if opens:
+                _start, last_article, open_identifier, _heading = opens[-1]
+                same_block = (
+                    open_identifier == identifier
+                    and not any(last_article < pos < idx for pos in part_indices)
+                )
+                if same_block:
+                    opens[-1] = (_start, idx, open_identifier, _heading)
+                    continue
+            introduction = next(
+                (pos for pos, _id, _text in boundaries if previous_part < pos < idx), idx,
+            )
+            opens.append((introduction, idx, identifier, heading))
+
+        blocks: list[tuple[int, int, str | None, str | None]] = []
+        for order, (start, last_article, identifier, heading) in enumerate(opens):
+            next_open = opens[order + 1][0] if order + 1 < len(opens) else len(paragraphs)
+            next_part = next(
+                (pos for pos in part_indices if pos > last_article), len(paragraphs),
+            )
+            blocks.append((start, min(next_open, next_part), identifier, heading))
+        return blocks
+
+    def _cover_stops(self, paragraphs: list[OfficeXMLParagraph]) -> list[int]:
+        """Indices at which an annex gives way to a cover regulation.
+
+        An annex otherwise runs to the next annex heading, which in a
+        consolidated rulebook swallows the cover regulation of the *next*
+        regulation whole: its articles are appended to the body of the last
+        rule of the previous regulation's annex, presenting the text of one
+        regulation as part of another.
+        """
+        return [start for start, _end, _identifier, _heading in self._cover_blocks(paragraphs)]
+
+    def _parse_cover_regulations(
+        self, paragraphs: list[OfficeXMLParagraph],
+    ) -> list[ParsedCoverRegulation]:
+        """The cover regulations the document states, in document order.
+
+        Blocks the same regulation heading governs are one cover regulation,
+        however far apart the document states them.  Blocks no heading names a
+        regulation for are kept together as one unnamed cover regulation and
+        attributed by nothing: proximity is not provenance.
+        """
+        covers: dict[str | None, ParsedCoverRegulation] = {}
+        for start, end, identifier, heading in self._cover_blocks(paragraphs):
+            cover = covers.get(identifier)
+            if cover is None:
+                cover = ParsedCoverRegulation(
+                    regulation=identifier,
+                    title=heading or 'Cover Regulation',
+                )
+                covers[identifier] = cover
+            for entry in self._collect_cover_entries(paragraphs, start, end):
+                entry.sort_order = len(cover.entries) + 1
+                cover.entries.append(entry)
+        return [cover for cover in covers.values() if cover.entries]
+
+    def _collect_cover_entries(
+        self, paragraphs: list[OfficeXMLParagraph], start_idx: int, end_idx: int,
+    ) -> list[ParsedEntry]:
+        positions: list[tuple[int, dict[str, str]]] = [
+            (idx, info)
+            for idx, info in self._cover_entry_positions(paragraphs)
+            if start_idx <= idx < end_idx
+        ]
+        entries: list[ParsedEntry] = []
+        for order, (start, info) in enumerate(positions):
+            end = positions[order + 1][0] if order + 1 < len(positions) else end_idx
+            entries.append(self._parse_cover_entry(paragraphs, info, order + 1, start, end))
+        return entries
+
+    def _parse_cover_regulation(self, paragraphs: list[OfficeXMLParagraph]) -> list[ParsedPart]:
+        """The cover regulation as parts \u2014 the shape hybrid mode has always had.
+
+        Confined to the cover regulation stated before the first annex, which
+        is the material this mode has always turned into a 'REGULATION' part.
+        Everything else the document states is read into ``cover_regulations``.
+        """
+        first_part_idx = self._first_part_annex_idx(paragraphs)
+        entries = self._collect_cover_entries(paragraphs, 0, first_part_idx)
+        if not entries:
+            return []
 
         reg_entries: list[ParsedEntry] = []
         annex_entries: list[ParsedEntry] = []
-        for entry in all_entries:
+        for entry in entries:
             ref_normalized = entry.entry_ref.replace('\xa0', ' ')
             if 'Annex I' in ref_normalized:
                 annex_entries.append(entry)
@@ -546,12 +768,23 @@ class EASAOfficeXMLParser:
             headings.append((idx, annex, code, para.text))
         return headings
 
-    def _parse_parts(self, paragraphs: list[OfficeXMLParagraph]) -> list[ParsedPart]:
+    def _parse_parts(
+        self, paragraphs: list[OfficeXMLParagraph], stops: list[int] | None = None,
+    ) -> list[ParsedPart]:
+        """A part per annex the document states.
+
+        *stops* are indices at which an annex ends early — where the document
+        turns from the annexes of one regulation to the cover regulation of
+        the next.  Without them the annex runs to the next annex heading and
+        takes that cover regulation into the body of its last rule.
+        """
         part_indices = self._part_headings(paragraphs)
+        stops = stops or []
 
         parts: list[ParsedPart] = []
         for idx, (start, annex, code, title) in enumerate(part_indices):
             end = part_indices[idx + 1][0] if idx + 1 < len(part_indices) else len(paragraphs)
+            end = min(end, next((stop for stop in stops if stop > start), end))
             subparts = self._parse_subparts(paragraphs, start, end)
             parts.append(ParsedPart(
                 code=code,
