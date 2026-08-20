@@ -23,6 +23,19 @@ _ENTRY_COLUMNS = (
     "JOIN regulation_subparts sp ON sp.id = e.subpart_id "
 )
 
+# What a reference search projects.  Beyond the entry itself it selects the
+# provenance a result is cited from — the URL the source published for the
+# entry, the locator saying where in the document it was parsed from, and the
+# document's own URLs, slug and revision.  All three match paths below select
+# it identically, so a result carries the same provenance however it matched.
+_SEARCH_COLUMNS = (
+    "SELECT e.id, e.entry_ref, e.entry_type, e.title, e.body_text, "
+    "       e.source_url AS entry_url, e.source_locator AS entry_locator, "
+    "       d.slug, d.source_url AS document_url, "
+    "       d.page_url AS document_page_url, d.revision AS document_revision, "
+    "       p.part_code, sp.subpart_code"
+)
+
 
 def lookup_reference(db: Database, ref: str) -> list[dict]:
     """Resolve an exact regulation reference.
@@ -69,9 +82,7 @@ def _search_by_reference(
     """
     pattern = f"%{like_escape(normalize_reference_text(query))}%"
     sql = (
-        "SELECT e.id, e.entry_ref, e.entry_type, e.title, e.body_text, "
-        "       d.slug, p.part_code, sp.subpart_code, "
-        "       1.0 AS fts_score "
+        f"{_SEARCH_COLUMNS}, 1.0 AS fts_score "
         "FROM regulation_entries e "
         "JOIN source_documents d ON d.id = e.document_id "
         "JOIN regulation_parts p ON p.id = e.part_id "
@@ -100,9 +111,7 @@ def search_references(
 
     if fts.has_terms:
         fts_sql = (
-            "SELECT e.id, e.entry_ref, e.entry_type, e.title, e.body_text, "
-            "       d.slug, p.part_code, sp.subpart_code, "
-            "       -fts.rank AS fts_score "
+            f"{_SEARCH_COLUMNS}, -fts.rank AS fts_score "
             "FROM entries_fts fts "
             "JOIN regulation_entries e ON e.id = fts.rowid "
             "JOIN source_documents d ON d.id = e.document_id "
@@ -124,9 +133,7 @@ def search_references(
     if not results:
         like_pattern = f"%{query}%"
         like_sql = (
-            "SELECT e.id, e.entry_ref, e.entry_type, e.title, e.body_text, "
-            "       d.slug, p.part_code, sp.subpart_code, "
-            "       1.0 AS fts_score "
+            f"{_SEARCH_COLUMNS}, 1.0 AS fts_score "
             "FROM regulation_entries e "
             "JOIN source_documents d ON d.id = e.document_id "
             "JOIN regulation_parts p ON p.id = e.part_id "

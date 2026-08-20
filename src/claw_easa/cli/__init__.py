@@ -564,11 +564,24 @@ def lookup_cmd(ref: str) -> None:
 @click.argument("query")
 @click.option("--limit", default=10, help="Max results")
 @click.option("--slug", default=None, help="Restrict search to a specific source slug")
-def refs_cmd(query: str, limit: int, slug: str | None) -> None:
+@click.option("--json", "as_json", is_flag=True,
+              help="Emit the same results as JSON, with source provenance")
+def refs_cmd(query: str, limit: int, slug: str | None, as_json: bool) -> None:
     """Search regulation references."""
     from claw_easa.retrieval.service import refs
 
     rows = refs(query, limit=limit, slug=slug)
+    if as_json:
+        import json
+
+        from claw_easa.retrieval.provenance import refs_payload
+
+        # A caller that asked for JSON is answered in JSON even when nothing
+        # matched: an empty result set is the machine-readable form of the
+        # 'No results' line below, and still carries the query it answers.
+        payload = refs_payload(rows, query, limit=limit, slug=slug)
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
     if not rows:
         click.echo(f"No results for: {query}")
         return

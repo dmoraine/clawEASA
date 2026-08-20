@@ -77,6 +77,58 @@ claw-easa refs "crew fatigue" --slug occurrence-reporting
 claw-easa snippets "crew fatigue" --slug occurrence-reporting
 ```
 
+## Machine-readable references
+
+`claw-easa refs --json` prints the same results as the default text output —
+same matches, same order, same scores, same `--limit` and `--slug` — with the
+provenance to cite each one from:
+
+```bash
+claw-easa refs "split duty" --json
+claw-easa refs "crew fatigue" --slug occurrence-reporting --limit 3 --json
+```
+
+```json
+{
+  "query": "split duty",
+  "slug": null,
+  "limit": 10,
+  "count": 1,
+  "results": [
+    {
+      "entry_ref": "ORO.FTL.110",
+      "entry_type": "IR",
+      "title": "Operator responsibilities",
+      "score": 0.7190149842835983,
+      "source": {
+        "slug": "air-ops",
+        "url": "https://www.easa.europa.eu/en/downloads/136682/en",
+        "url_kind": "document",
+        "locator": "paragraphs:118-124",
+        "revision": "March 2026"
+      }
+    }
+  ]
+}
+```
+
+- `url` is the URL the source published for the entry itself where there is
+  one (`url_kind: "entry"`), the URL recorded for the document holding it
+  otherwise (`url_kind: "document"`), and `null` when neither was recorded.
+  No URL is ever derived from a reference or a slug: `null` means the corpus
+  holds no address for that rule, not that one could be guessed.
+- `locator` says where in the document the entry was parsed from — what
+  narrows a document-level URL down to the rule.
+- `revision` is the EASA edition held for that source, as `claw-easa manifest`
+  reports it.
+- `score` is the internal retrieval score the text output prints, comparable
+  within one search only.
+- The rule text is deliberately absent: `lookup` and `snippets` serve the
+  wording in full.
+
+Nothing else about `refs` changes — without `--json` the output is the text
+listing it has always printed, including `No results for: <query>`.
+
 ## Downloading sources
 
 The normal HTTP fetch currently works without browser automation. It discovers
