@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal Easy Access Rules for Information Security fixture
+  (Regulations (EU) 2023/203 and (EU) 2022/1645).
+
+  One Easy Access Rules document consolidates two regulations:
+
+  - Implementing Regulation (EU) 2023/203 — ANNEX I (Part-IS.I.OR) states the
+    IS.I.OR.xxx requirements for organisations, ANNEX II (Part-IS.AR) the
+    IS.AR.xxx requirements for competent authorities;
+  - Delegated Regulation (EU) 2022/1645 — ANNEX I (Part-IS.D.OR) states the
+    IS.D.OR.xxx requirements for the organisations it covers.
+
+  Both regulations number their first annex 'ANNEX I', so the annex label
+  alone cannot say which regulation states a part: provenance has to be
+  carried separately or the two collapse into one undifferentiated corpus.
+
+  The dotted part code is the shape the production parser has to cope with
+  for Part-IS coverage to exist at all.
+-->
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+      <w:r><w:t>Easy Access Rules for Information Security (Regulations (EU) 2023/203 and (EU) 2022/1645)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Table of contents</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>IS.I.OR.200 Information security management system (ISMS)</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX I (Part-IS.I.OR)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>SUBPART A — GENERAL REQUIREMENTS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.I.OR.200 Information security management system (ISMS)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The organisation shall establish, implement and maintain an information security management system which ensures that the organisation identifies information security risks with a potential impact on aviation safety.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3GM"/></w:pPr>
+      <w:r><w:t>GM1 IS.I.OR.200 Information security management system (ISMS)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The scope of the ISMS may be aligned with an existing management system where the organisation already holds one.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.I.OR.205 Information security risk assessment</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The organisation shall identify all its elements which could be exposed to information security risks and shall assess the risks resulting from those threats.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3AMC"/></w:pPr>
+      <w:r><w:t>AMC1 IS.I.OR.205 Information security risk assessment</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The risk assessment should be repeated whenever a significant change to the information systems occurs.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX II (Part-IS.AR)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>SUBPART A — GENERAL REQUIREMENTS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.AR.200 Information security management system (ISMS)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The competent authority shall establish, implement and maintain an information security management system.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX I (Part-IS.D.OR)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>SUBPART A — GENERAL REQUIREMENTS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>IS.D.OR.200 Information security management system (ISMS)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The organisation shall establish, implement and maintain an information security management system in accordance with this Annex.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3AMC"/></w:pPr>
+      <w:r><w:t>AMC1 IS.D.OR.200 Information security management system (ISMS)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The management system documentation should describe how the organisation ensures compliance with this Annex.</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>

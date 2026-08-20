@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal Easy Access Rules for Air Operations fixture, revision March 2026
+  (Regulation (EU) No 965/2012).
+
+  Reproduces the three annexes in the initial qualification scope:
+    ANNEX III (Part-ORO) - ORO.xxx organisation requirements
+    ANNEX IV  (Part-CAT) - CAT.xxx commercial air transport operations
+    ANNEX V   (Part-SPA) - SPA.xxx specific approvals
+
+  The heading styles and the placement of every entry below are taken from
+  the EASA download itself, including the two shapes the ANNEX -> SUBPART ->
+  SECTION -> entry hierarchy does not describe:
+
+    * 'ORO.GEN.005 Scope' is a Heading2IR rule stated directly under the
+      annex heading, above the first SUBPART;
+    * 'CAT.GEN.100 Competent authority' is a Heading3IR rule stated under
+      SUBPART A, above its first SECTION.
+
+  Air Ops also separates a reference from its title with a non-breaking
+  space in some headings ('ORO.FTL.110 Operator responsibilities'), and
+  states the same title under two subparts (ORO.GEN.110 and ORO.FTL.110 are
+  both 'Operator responsibilities').
+
+  Kept deliberately small: the headings and one body paragraph per entry, in
+  the same WordprocessingML shape the real EASA download uses.
+-->
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+      <w:r><w:t>Easy Access Rules for Air Operations (Regulation (EU) No 965/2012)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Table of contents</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>ORO.GEN.005 Scope</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>CAT.GEN.100 Competent authority</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>SPA.PBN.100 PBN operations</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX III (Part-ORO)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>ORO.GEN.005 Scope</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>This Annex establishes requirements to be followed by an operator conducting commercial air transport operations.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>SUBPART GEN: GENERAL REQUIREMENTS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3"/></w:pPr>
+      <w:r><w:t>SECTION 1 – General</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4IR"/></w:pPr>
+      <w:r><w:t>ORO.GEN.110 Operator responsibilities</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The operator is responsible for the operation of the aircraft in accordance with Annex IV to Regulation (EU) 2018/1139.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading5AMC"/></w:pPr>
+      <w:r><w:t>AMC1 ORO.GEN.110(a) Operator responsibilities</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The security training programme for crew members should cover the recognition of prohibited articles.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading5GM"/></w:pPr>
+      <w:r><w:t>GM1 ORO.GEN.110(a) Operator responsibilities</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The operator remains responsible for tasks contracted to another organisation.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>SUBPART FTL: FLIGHT AND DUTY TIME LIMITATIONS AND REST REQUIREMENTS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3"/></w:pPr>
+      <w:r><w:t>SECTION 1 – General</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4IR"/></w:pPr>
+      <w:r><w:t>ORO.FTL.110 Operator responsibilities</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The operator shall publish duty rosters sufficiently in advance to allow crew members to plan adequate rest.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX IV (Part-CAT)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>SUBPART A: GENERAL REQUIREMENTS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>CAT.GEN.100 Competent authority</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The competent authority shall be the authority designated by the Member State in which the operator has its principal place of business.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3"/></w:pPr>
+      <w:r><w:t>SECTION 1 – Motor-powered aircraft</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4IR"/></w:pPr>
+      <w:r><w:t>CAT.GEN.MPA.100 Crew responsibilities</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The crew member shall be responsible for the proper execution of their duties related to the safety of the aircraft and its occupants.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading5AMC"/></w:pPr>
+      <w:r><w:t>AMC1 CAT.GEN.MPA.100(b) Crew responsibilities</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Copies of reports affecting the continuing airworthiness of the aircraft should be kept by the operator.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX V (Part-SPA)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>SUBPART A: GENERAL REQUIREMENTS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>SPA.GEN.100 Competent authority</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The competent authority for issuing a specific approval shall be the authority of the Member State in which the operator resides.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4GM"/></w:pPr>
+      <w:r><w:t>GM1 SPA.GEN.100(a) Competent authority</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The place where an operator resides is determined by the location of its registered office.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>SUBPART B: PERFORMANCE-BASED NAVIGATION (PBN) OPERATIONS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>SPA.PBN.100 PBN operations</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>An aircraft shall only be operated in designated airspace where performance-based navigation specifications are applied if the operator holds a specific approval.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading4AMC"/></w:pPr>
+      <w:r><w:t>AMC1 SPA.PBN.100 PBN operations</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The operator should establish flight crew training and qualification requirements for each navigation specification.</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>

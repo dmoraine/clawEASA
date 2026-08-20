@@ -4,6 +4,28 @@
 PRAGMA foreign_keys = ON;
 
 -- Source document registry
+--
+-- 'status' is the ingestion lifecycle of the document — what the pipeline
+-- did with it.  'incomplete' means the source was processed but yielded no
+-- usable content, so it must not be mistaken for a successful parse.  It is
+-- deliberately NOT the operational corpus status: current /
+-- freshness-unknown / stale / incomplete / failed are graded per build in
+-- corpus_builds, because they depend on what EASA publishes today rather
+-- than on what the pipeline did.
+--
+-- Four unrelated version axes are kept apart on purpose:
+--   * the schema shape       -> schema_migrations.version
+--   * the corpus build       -> corpus_builds.build_id / tool_version
+--   * the manifest shape     -> the manifest's own manifest_version
+--   * the EASA edition held  -> revision / published_at below
+-- 'revision'             the edition label EASA advertised for the artefact
+--                        actually held, e.g. 'March 2026'.
+-- 'published_at'         that label normalised to a sortable date, or NULL
+--                        when the label cannot be read as one.
+-- 'catalog_revision'     what the EASA catalogue advertised the last time it
+--                        was read, with 'catalog_checked_at' saying when.
+--                        Never assumed: absent means freshness is unknown.
+-- 'parser_version'       which parser produced the entries currently held.
 CREATE TABLE IF NOT EXISTS source_documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     slug TEXT NOT NULL UNIQUE,
@@ -12,8 +34,15 @@ CREATE TABLE IF NOT EXISTS source_documents (
     language TEXT NOT NULL DEFAULT 'en',
     page_url TEXT,
     source_url TEXT,
+    revision TEXT,
+    published_at TEXT,
+    catalog_revision TEXT,
+    catalog_published_at TEXT,
+    catalog_checked_at TEXT,
+    parser_version TEXT,
     status TEXT NOT NULL DEFAULT 'registered'
-        CHECK(status IN ('registered', 'fetched', 'parsed', 'indexed', 'error')),
+        CHECK(status IN ('registered', 'fetched', 'parsed', 'incomplete',
+                         'indexed', 'error')),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     parsed_at TEXT,
@@ -21,6 +50,12 @@ CREATE TABLE IF NOT EXISTS source_documents (
 );
 
 -- Source files tracking
+--
+-- 'checksum' holds the SHA-256 of the artefact as downloaded and
+-- 'downloaded_at' the moment it was retrieved; the manifest exports them as
+-- the source's checksum and retrieved_at.  The newest row is the artefact in
+-- use and the one before it is the rollback candidate; nothing queries rule
+-- text through the older rows.
 CREATE TABLE IF NOT EXISTS source_files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     document_id INTEGER NOT NULL REFERENCES source_documents(id) ON DELETE CASCADE,
@@ -31,13 +66,39 @@ CREATE TABLE IF NOT EXISTS source_files (
     downloaded_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Which regulations a source document is built from.
+--
+-- One Easy Access Rules document can consolidate more than one regulation:
+-- the Information Security EAR publishes both Implementing Regulation
+-- (EU) 2023/203 and Delegated Regulation (EU) 2022/1645.  Both number their
+-- first annex 'ANNEX I', so the annex label cannot say which regulation
+-- states a part — the declaration is recorded here and each part carries the
+-- identifier of the regulation stating it.
+-- 'part_codes' is the JSON array of part codes the regulation declares.
+CREATE TABLE IF NOT EXISTS source_regulations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id INTEGER NOT NULL REFERENCES source_documents(id) ON DELETE CASCADE,
+    identifier TEXT NOT NULL,
+    title TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    part_codes TEXT NOT NULL DEFAULT '[]',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(document_id, identifier)
+);
+
 -- Regulatory hierarchy
+-- 'regulation' is the identifier of the regulation stating the part.  It is
+-- NULL when the source declares no regulations, and when no declared
+-- regulation claims the part — an unclaimed part is never filed under a
+-- regulation by proximity, because that would attribute requirements to a
+-- regulation that does not state them.
 CREATE TABLE IF NOT EXISTS regulation_parts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     document_id INTEGER NOT NULL REFERENCES source_documents(id) ON DELETE CASCADE,
     part_code TEXT NOT NULL,
     annex TEXT,
     title TEXT NOT NULL,
+    regulation TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0
 );
 
@@ -200,6 +261,94 @@ CREATE TABLE IF NOT EXISTS audit_finding_evidence (
     evidence_text TEXT NOT NULL,
     reference_text TEXT,
     UNIQUE(revision_db_id, evidence_kind, evidence_index)
+);
+
+-- Corpus build manifest / provenance
+--
+-- Every build of the corpus is recorded with the provenance of the sources it
+-- was built from and an operational status.  The statuses are pipeline
+-- labels, never a compliance conclusion:
+--   current            every source matches the EASA revision last observed
+--   freshness-unknown  the corpus parsed, but no comparable EASA revision was
+--                      available to check it against
+--   stale              EASA has published something newer than what is held
+--   incomplete         a source is missing or contributed nothing
+--   failed             the build holds no usable corpus at all
+--
+-- Builds stay append-only: recording one never updates or deletes an earlier
+-- row, so the technical history of what was built when survives intact.  Two
+-- of those rows carry a 'role', which is what makes the *operationally*
+-- interesting builds explicit without a second table:
+--   'current'   the build the active corpus is, whatever its status;
+--   'rollback'  the most recent healthy build other than the current one —
+--               the last known good corpus to fall back to.
+-- 'role' is a slot pointer, 'status' is a grade: a build can hold the current
+-- slot while being graded failed, which is precisely when the rollback slot
+-- matters.  The partial unique index below allows at most one of each.
+--
+-- Rows recorded before freshness was tracked carry no comparable EASA
+-- revision, so they are migrated to 'freshness-unknown' and never to
+-- 'current': nothing established that they were up to date.
+CREATE TABLE IF NOT EXISTS corpus_builds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    build_id TEXT NOT NULL UNIQUE,
+    role TEXT CHECK(role IN ('current', 'rollback')),
+    status TEXT NOT NULL
+        CHECK(status IN ('current', 'freshness-unknown', 'stale',
+                         'incomplete', 'failed')),
+    tool_version TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    parser_version TEXT,
+    source_count INTEGER NOT NULL DEFAULT 0,
+    entry_count INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    manifest_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_corpus_builds_status
+    ON corpus_builds(status, id);
+
+-- At most one build in each slot.  Historical builds hold no role and are
+-- not indexed here, so the history can grow without bound while exactly one
+-- build is current and at most one is the rollback candidate.
+CREATE UNIQUE INDEX IF NOT EXISTS uix_corpus_builds_role
+    ON corpus_builds(role) WHERE role IS NOT NULL;
+
+-- Per-source provenance of a recorded build, queryable without parsing the
+-- manifest JSON.  Mirrors the exported manifest field for field, so what was
+-- carried from the catalogue through ingestion is not dropped on the way in.
+--
+-- 'status' is the source's ingestion lifecycle, 'freshness' its graded
+-- operational status.  They answer different questions and are kept apart:
+-- a source can be 'parsed' and still be 'stale'.
+CREATE TABLE IF NOT EXISTS corpus_build_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    build_db_id INTEGER NOT NULL REFERENCES corpus_builds(id) ON DELETE CASCADE,
+    slug TEXT NOT NULL,
+    source_family TEXT NOT NULL,
+    title TEXT,
+    status TEXT NOT NULL,
+    freshness TEXT NOT NULL DEFAULT 'freshness-unknown'
+        CHECK(freshness IN ('current', 'freshness-unknown', 'stale',
+                            'incomplete', 'failed')),
+    freshness_basis TEXT,
+    freshness_detail TEXT,
+    page_url TEXT,
+    source_url TEXT,
+    revision TEXT,
+    published_at TEXT,
+    catalog_revision TEXT,
+    catalog_published_at TEXT,
+    catalog_checked_at TEXT,
+    parser_version TEXT,
+    checksum TEXT,
+    local_path TEXT,
+    download_url TEXT,
+    retrieved_at TEXT,
+    entry_count INTEGER NOT NULL DEFAULT 0,
+    parsed_at TEXT,
+    UNIQUE(build_db_id, slug)
 );
 
 -- Schema migrations tracking

@@ -61,6 +61,15 @@ def status_cmd() -> None:
         click.echo("FAISS index:     not built — run 'claw-easa index build'")
 
     if not db_exists:
+        legacy = Path.cwd() / "data" / settings.db_file
+        if legacy.is_file():
+            # Before the runtime path was anchored to the home directory, the
+            # corpus landed in ./data of whatever directory the CLI ran from.
+            click.echo(
+                f"\nFound a corpus at {legacy} — the runtime path is now "
+                f"cwd-independent. Move it to {settings.data_path} or set "
+                f"CLAW_EASA_DATA_DIR={legacy.parent} to keep using it."
+            )
         click.echo("\n(database not created — run 'claw-easa init')")
         return
 
@@ -331,6 +340,69 @@ def ingest_faq_all_cmd(delay: float) -> None:
     click.echo(f"\nDone: {total_faqs} FAQs from {domains_with_content} domains.")
     if errors:
         click.echo(f"  Errors: {errors} domains failed.")
+
+
+# --- Manifest commands ---
+
+
+@main.command("manifest")
+@click.option("--record", "record", is_flag=True,
+              help="Append this qualification to the build history.")
+@click.option("--export", "export_path", type=click.Path(dir_okay=False, path_type=Path),
+              default=None, help="Write the manifest JSON to this path.")
+@click.option("--expect", "expected", multiple=True,
+              help="Slug the corpus must contain (repeatable).")
+def manifest_cmd(record: bool, export_path: Path | None, expected: tuple[str, ...]) -> None:
+    """Qualify the corpus and show its provenance.
+
+    Status is one of qualified / stale / incomplete / failed.  Recording a
+    build never displaces the last qualified one.
+    """
+    from claw_easa.ingest.manifest import (
+        MANIFEST_FILE_NAME,
+        build_manifest,
+        export_manifest,
+        last_qualified_build,
+        record_build,
+    )
+    from claw_easa.ingest.service import _open_db
+
+    db = _open_db()
+    try:
+        manifest = build_manifest(db, expected_slugs=tuple(expected))
+        if record:
+            record_build(db, manifest)
+
+        click.echo(f"Build:    {manifest.build_id}")
+        click.echo(f"Status:   {manifest.status}")
+        click.echo(f"Sources:  {len(manifest.sources)}")
+        click.echo(f"Entries:  {manifest.entry_count}")
+        for source in manifest.sources:
+            revision = source.revision or "unknown revision"
+            click.echo(
+                f"  {source.slug:<30} {source.entry_count:>6} entries  "
+                f"{source.status:<11} {revision}"
+            )
+        for note in manifest.notes:
+            click.echo(f"  !! {note}")
+
+        qualified = last_qualified_build(db)
+        if qualified and qualified.build_id != manifest.build_id:
+            click.echo(
+                f"\nLast qualified build: {qualified.build_id} "
+                f"({qualified.entry_count} entries, {qualified.created_at})"
+            )
+        elif not qualified:
+            click.echo("\nNo qualified build recorded yet.")
+
+        if export_path is not None or record:
+            from claw_easa.config import get_settings
+
+            target = export_path or (get_settings().data_path / MANIFEST_FILE_NAME)
+            written = export_manifest(db, target, current=manifest)
+            click.echo(f"Manifest written to {written}")
+    finally:
+        db.close()
 
 
 # --- Index commands ---

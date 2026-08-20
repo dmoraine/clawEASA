@@ -9,12 +9,15 @@ import zipfile
 from claw_easa.config import get_settings
 from claw_easa.db import Database
 from claw_easa.db.migrations import MigrationRunner
+from claw_easa.freshness import parse_published_date
 from claw_easa.ingest.normalize import CanonicalPersister
 from claw_easa.ingest.parser import EASAOfficeXMLParser
+from claw_easa.ingest.regulations import regulations_for
 from claw_easa.ingest.repository import (
     get_document_by_slug,
     get_latest_source_file,
     record_download,
+    record_source_regulations,
     upsert_source_document_from_values,
 )
 from claw_easa.ingest.sources import SourceSpec, get_alias
@@ -34,7 +37,10 @@ def _resolve_source(slug: str, *, url: str | None = None) -> SourceSpec:
     """Build a SourceSpec by resolving the slug against the EASA catalog.
 
     If *url* is provided it is used directly; otherwise the catalog
-    scraper discovers the current page URL from the EASA website.
+    scraper discovers the current page URL from the EASA website — and, with
+    it, the revision EASA advertises and when that was read.  An explicit
+    *url* bypasses the catalogue, so it carries no revision: nothing observed
+    which edition it serves.
     """
     alias = get_alias(slug)
     source_family = alias.source_family if alias else "ear"
@@ -61,6 +67,9 @@ def _resolve_source(slug: str, *, url: str | None = None) -> SourceSpec:
         title=entry.title,
         language=language,
         page_url=entry.page_url,
+        revision=entry.revision,
+        published_at=entry.published_at,
+        checked_at=entry.checked_at,
     )
 
 
@@ -74,7 +83,7 @@ def fetch_source(slug: str, *, url: str | None = None, use_browser: bool = False
     """
     source = _resolve_source(slug, url=url)
     settings = get_settings()
-    data_dir = Path(settings.data_dir)
+    data_dir = settings.data_path
 
     if use_browser:
         from claw_easa.ingest.scraper_browser import BrowserSourceFetcher
@@ -85,14 +94,27 @@ def fetch_source(slug: str, *, url: str | None = None, use_browser: bool = False
 
     db = _open_db()
     try:
+        # The artefact behind the page the catalogue advertises *is* the
+        # revision the catalogue advertises, so one reading is recorded twice:
+        # as the edition held, and as the catalogue reading it was taken from.
+        # They start out equal — the copy is current by construction — and a
+        # later catalogue read that advertises something else is what makes
+        # the held copy stale.  A published date the card did not corroborate
+        # falls back to the month the revision label itself names.
+        published_at = source.published_at or parse_published_date(source.revision)
         doc_id = upsert_source_document_from_values(
             db,
             slug=source.slug,
             source_family=source.source_family,
             title=source.title,
             language=source.language,
-            page_url=source.page_url,
+            page_url=source.page_url or None,
             source_url=source.source_url,
+            revision=source.revision,
+            published_at=published_at,
+            catalog_revision=source.revision,
+            catalog_published_at=published_at,
+            catalog_checked_at=source.checked_at,
         )
 
         downloaded = fetcher.fetch(source, data_dir)
@@ -167,7 +189,7 @@ def import_local_source(slug: str, file_path: str | Path) -> dict:
         raise FileNotFoundError(f"File not found: {src}")
 
     settings = get_settings()
-    target_dir = Path(settings.data_dir) / "downloads" / slug
+    target_dir = settings.data_path / "downloads" / slug
     target_dir.mkdir(parents=True, exist_ok=True)
     dest = target_dir / src.name
 
@@ -240,6 +262,14 @@ def parse_source(slug: str, *, file: str | Path | None = None) -> dict:
         parser = EASAOfficeXMLParser()
         parsed = parser.parse_file(parse_path, doc["title"])
 
+        # Re-declare the source's regulations from the current declaration
+        # before persisting, so each part is attributed to the regulation
+        # that states it.  Declared against the slug the resolved document is
+        # filed under, not the caller's argument, so the provenance follows
+        # the document being parsed.  A slug that declares none records none,
+        # which is how a source without regulation provenance is expressed.
+        record_source_regulations(db, doc["id"], regulations_for(doc["slug"]))
+
         persister = CanonicalPersister(db)
         summary = persister.persist_document(doc["id"], parsed)
 
@@ -251,6 +281,7 @@ def parse_source(slug: str, *, file: str | Path | None = None) -> dict:
             "entries": summary.entries,
             "duplicate_entries_skipped": summary.duplicate_entries_skipped,
             "empty_entries_skipped": summary.empty_entries_skipped,
+            "unattributed_parts": list(summary.unattributed_parts),
         }
     finally:
         db.close()

@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal Easy Access Rules for Continuing Airworthiness fixture
+  (Regulation (EU) No 1321/2014).
+
+  Reproduces the annexes that matter for reference attribution:
+    ANNEX I  (Part-M)    - M.A.xxx requirements
+    ANNEX II (Part-145)  - 145.A.xxx requirements (numeric part code)
+    ANNEX Vc (Part-CAMO) - CAMO.A.xxx requirements (lettered annex)
+
+  Part-M and Part-145 carry EASA's un-numbered soft-law headings
+  ('AMC M.A.201(e)', 'GM M.A.302(b)'); Part-CAMO carries the numbered form
+  ('AMC1 CAMO.A.200').  Both appear in the real rulebook.
+
+  Kept deliberately small: only the headings and one body paragraph per
+  entry, in the same WordprocessingML shape the real EASA download uses.
+-->
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+      <w:r><w:t>Easy Access Rules for Continuing Airworthiness (Regulation (EU) No 1321/2014)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>Table of contents</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>M.A.201 Responsibilities</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>145.A.30 Personnel requirements</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="TOC3"/></w:pPr>
+      <w:r><w:t>CAMO.A.200 Management system</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX I (Part-M)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>SUBPART B — ACCOUNTABILITY</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>M.A.201 Responsibilities</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The owner shall be responsible for the continuing airworthiness of an aircraft and shall ensure that no flight takes place unless the requirements of this Annex are met.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3AMC"/></w:pPr>
+      <w:r><w:t>AMC M.A.201(e) Responsibilities</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The continuing airworthiness management contract should specify the obligations of each party.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>M.A.202 Occurrence reporting</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Any person or organisation responsible in accordance with point M.A.201 shall report any identified condition of an aircraft or component which endangers flight safety.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>SUBPART C — CONTINUING AIRWORTHINESS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>M.A.302 Aircraft maintenance programme</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>Maintenance of each aircraft shall be organised in accordance with an aircraft maintenance programme.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3GM"/></w:pPr>
+      <w:r><w:t>GM M.A.302(b) Aircraft maintenance programme</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The maintenance programme may be based on the maintenance review board report where one exists.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX II (Part-145)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>SUBPART A — GENERAL</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>145.A.30 Personnel requirements</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The organisation shall appoint an accountable manager who has corporate authority for ensuring that all maintenance required by the customer can be financed and carried out.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3AMC"/></w:pPr>
+      <w:r><w:t>AMC 145.A.30(e) Personnel requirements</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The organisation should establish a procedure to assess the competence of maintenance personnel.</w:t></w:r>
+    </w:p>
+
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>ANNEX Vc (Part-CAMO)</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>SUBPART A — GENERAL REQUIREMENTS</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>CAMO.A.105 Competent authority</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The competent authority shall be the authority designated by the Member State in which the organisation has its principal place of business.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2IR"/></w:pPr>
+      <w:r><w:t>SUBPART B — MANAGEMENT</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3IR"/></w:pPr>
+      <w:r><w:t>CAMO.A.200 Management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The organisation shall establish, implement and maintain a management system that includes a safety policy and a compliance monitoring function.</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading3AMC"/></w:pPr>
+      <w:r><w:t>AMC1 CAMO.A.200 Management system</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Normal"/></w:pPr>
+      <w:r><w:t>The management system should be documented in the continuing airworthiness management exposition.</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>

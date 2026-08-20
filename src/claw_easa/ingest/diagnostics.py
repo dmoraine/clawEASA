@@ -34,6 +34,11 @@ class CoverageReport:
     missing_articles: list[str] = field(default_factory=list)
     uncaptured_headings: list[str] = field(default_factory=list)
     heading_coverage_pct: float = 0.0
+    #: Entries per cover regulation the document states, keyed by the
+    #: regulation identifier the document names for it.  Cover regulations are
+    #: held beside the parts rather than among them, so a report that counts
+    #: only parts says nothing about whether they were read.
+    cover_regulations: dict[str, int] = field(default_factory=dict)
 
 
 def coverage_report(xml_path: Path, title: str) -> CoverageReport:
@@ -53,6 +58,11 @@ def coverage_report(xml_path: Path, title: str) -> CoverageReport:
     parsed_article_nums: set[str] = set()
     total_entries = 0
 
+    def _record_article(entry) -> None:
+        m = re.match(r"Article\s+(\d+[A-Z]*)", entry.entry_ref)
+        if m:
+            parsed_article_nums.add(m.group(1))
+
     for part in doc.parts:
         for sp in part.subparts:
             for sec in sp.sections:
@@ -65,9 +75,14 @@ def coverage_report(xml_path: Path, title: str) -> CoverageReport:
                         empty_body += 1
                     elif body_len < 50:
                         short_body += 1
-                    m = re.match(r"Article\s+(\d+[A-Z]*)", entry.entry_ref)
-                    if m:
-                        parsed_article_nums.add(m.group(1))
+                    _record_article(entry)
+
+    # The articles a cover regulation states are held beside the parts, not
+    # among them, so a walk over parts alone reports every one of them as
+    # missing from the TOC even where the parser read them.
+    for cover in doc.cover_regulations:
+        for entry in cover.entries:
+            _record_article(entry)
 
     avg_body = total_body_chars / total_entries if total_entries else 0.0
 
@@ -86,21 +101,33 @@ def coverage_report(xml_path: Path, title: str) -> CoverageReport:
     ) if toc_articles else []
 
     # --- Uncaptured heading-style paragraphs ---
+    # 'Heading<n>CR' is the cover-regulation article style.  Counted here so
+    # that a cover article the parser stops reading shows up as uncaptured
+    # rather than as nothing at all: the styles a report ignores are the ones
+    # a layout change can drop silently.
     entry_heading_styles = {
         "Heading2CS", "Heading2GM",
         "Heading3CS", "Heading3IR", "Heading3AMC", "Heading3GM",
         "Heading4CS", "Heading4IR", "Heading4AMC", "Heading4GM",
         "Heading5CS", "Heading5AMC", "Heading5GM", "Heading5IR",
+        "Heading2CR", "Heading3CR", "Heading4CR", "Heading5CR",
     }
     captured_list_positions: set[int] = set()
+
+    def _record(entry) -> None:
+        if entry.source_locator:
+            m = re.match(r"paragraphs:(\d+)-", entry.source_locator)
+            if m:
+                captured_list_positions.add(int(m.group(1)) - 1)
+
     for part in doc.parts:
         for sp in part.subparts:
             for sec in sp.sections:
                 for entry in sec.entries:
-                    if entry.source_locator:
-                        m = re.match(r"paragraphs:(\d+)-", entry.source_locator)
-                        if m:
-                            captured_list_positions.add(int(m.group(1)) - 1)
+                    _record(entry)
+    for cover in doc.cover_regulations:
+        for entry in cover.entries:
+            _record(entry)
 
     uncaptured: list[str] = []
     total_entry_headings = 0
@@ -164,8 +191,15 @@ def format_report(r: CoverageReport) -> str:
         for h in r.uncaptured_headings:
             lines.append(f"   {h}")
 
+    if r.entries == 0:
+        lines.append(
+            f"!! NO ENTRIES EXTRACTED from {r.paragraph_count} paragraphs "
+            f"— the document structure was not recognised"
+        )
+
     ok = (
-        r.empty_body == 0
+        r.entries > 0
+        and r.empty_body == 0
         and not r.missing_articles
         and r.heading_coverage_pct >= 99.0
     )

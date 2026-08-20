@@ -141,9 +141,36 @@ reference for the IR text, not as a drop-in EAR source.
 Settings are resolved in order: `config.yaml` → environment variables → defaults.
 
 Key environment variables:
-- `CLAW_EASA_DATA_DIR` — data directory (default: `data/`)
+- `CLAW_EASA_DATA_DIR` — data directory (default: `~/.local/share/claw-easa`)
 - `CLAW_EASA_DB_FILE` — SQLite filename (default: `claw_easa.db`)
 - `CLAW_EASA_EMBEDDING_MODEL` — embedding model (default: `BAAI/bge-small-en-v1.5`)
+
+The default data directory is anchored to your home directory, so the SQLite
+database and FAISS index resolve to the same place whether the CLI runs from
+the repository, from `~`, or from an OpenClaw skill workspace. A relative
+`data_dir` in a `config.yaml` is resolved against that file's directory.
+
+**Upgrading from a `./data` corpus**: earlier versions resolved `data/`
+against the working directory, so a corpus could end up in several places.
+Move the existing `data/` directory to `~/.local/share/claw-easa`, or set
+`CLAW_EASA_DATA_DIR` to keep it where it is. `claw-easa status` prints the
+resolved path and points at a corpus left in `./data`.
+
+## Corpus manifest
+
+`claw-easa manifest` qualifies the corpus and reports its provenance — each
+source's EASA revision, checksum, local file and entry count — with a status
+of `qualified`, `stale`, `incomplete` or `failed`.
+
+```bash
+claw-easa manifest                        # qualify and show
+claw-easa manifest --record               # append to the build history + export JSON
+claw-easa manifest --expect information-security   # require a source to be present
+```
+
+Builds are append-only: an `incomplete` or `failed` build is recorded and
+reported, but never displaces the last `qualified` build, which stays
+available in SQLite and in the exported `corpus-manifest.json`.
 
 ## Repository layout
 
@@ -159,10 +186,12 @@ clawEASA/
 ├── docs/
 ├── skill/
 │   └── claw-easa/       # OpenClaw AgentSkill package
-├── data/                # Runtime data (SQLite + FAISS), gitignored
-├── manifest.json
+├── manifest.json        # OpenClaw skill manifest
 └── pyproject.toml
 ```
+
+Runtime data (SQLite, FAISS index, downloads, `corpus-manifest.json`) lives
+outside the repository — see [Configuration](#configuration).
 
 ## OpenClaw skill packaging
 

@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import json
 import logging
+from collections.abc import Sequence
 
 from claw_easa.db.sqlite import Database
+from claw_easa.ingest.regulations import Regulation
+from claw_easa.references import (
+    canonical_reference,
+    like_escape,
+    normalize_reference_text,
+)
 
 log = logging.getLogger(__name__)
 
@@ -15,32 +23,158 @@ def upsert_source_document_from_values(
     language: str = "en",
     page_url: str | None = None,
     source_url: str | None = None,
+    revision: str | None = None,
+    published_at: str | None = None,
+    catalog_revision: str | None = None,
+    catalog_published_at: str | None = None,
+    catalog_checked_at: str | None = None,
 ) -> int:
+    """Register or update a source document.
+
+    *revision* is the dated revision EASA published for the ingested copy
+    (e.g. ``'March 2026'``) and *published_at* that label as a sortable date.
+    *catalog_revision*, *catalog_published_at* and *catalog_checked_at* are
+    what the EASA catalogue advertised, and when it was read.
+
+    Every one of them is left untouched by a caller that does not know it,
+    rather than erased: a manual import knows neither the catalogue nor the
+    page it came from, and dropping what an earlier fetch recorded would turn
+    a source whose freshness *can* be judged into one whose freshness is
+    unknown.
+    """
     with db.connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM source_documents WHERE slug = ?", (slug,))
             existing = cur.fetchone()
 
+            metadata = (
+                page_url, source_url, revision, published_at,
+                catalog_revision, catalog_published_at, catalog_checked_at,
+            )
+
             if existing:
                 cur.execute(
                     "UPDATE source_documents SET "
                     "source_family = ?, title = ?, language = ?, "
-                    "page_url = ?, source_url = ?, updated_at = datetime('now') "
+                    "page_url = COALESCE(?, page_url), "
+                    "source_url = COALESCE(?, source_url), "
+                    "revision = COALESCE(?, revision), "
+                    "published_at = COALESCE(?, published_at), "
+                    "catalog_revision = COALESCE(?, catalog_revision), "
+                    "catalog_published_at = COALESCE(?, catalog_published_at), "
+                    "catalog_checked_at = COALESCE(?, catalog_checked_at), "
+                    "updated_at = datetime('now') "
                     "WHERE slug = ?",
-                    (source_family, title, language, page_url, source_url, slug),
+                    (source_family, title, language, *metadata, slug),
                 )
                 conn.commit()
                 return existing["id"]
 
             cur.execute(
                 "INSERT INTO source_documents "
-                "(slug, source_family, title, language, page_url, source_url) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (slug, source_family, title, language, page_url, source_url),
+                "(slug, source_family, title, language, page_url, source_url, "
+                " revision, published_at, catalog_revision, catalog_published_at, "
+                " catalog_checked_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (slug, source_family, title, language, *metadata),
             )
             doc_id = cur.lastrowid
             conn.commit()
             return doc_id
+
+
+def record_source_regulations(
+    db: Database, document_id: int, regulations: Sequence[Regulation],
+) -> None:
+    """Declare which regulations *document_id* is built from.
+
+    The declaration is replaced wholesale, so re-registering a source cannot
+    leave behind a regulation it no longer publishes.  Recording an empty
+    sequence therefore clears the declaration, which is how a source with no
+    regulation provenance is expressed.
+    """
+    with db.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM source_regulations WHERE document_id = ?",
+                (document_id,),
+            )
+            for sort_order, regulation in enumerate(regulations):
+                cur.execute(
+                    "INSERT INTO source_regulations "
+                    "(document_id, identifier, title, kind, part_codes, sort_order) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        document_id, regulation.identifier, regulation.title,
+                        regulation.kind, json.dumps(list(regulation.part_codes)),
+                        sort_order,
+                    ),
+                )
+        conn.commit()
+
+
+def list_source_regulations(db: Database, slug: str) -> list[dict]:
+    """The regulations recorded against *slug*, in the declared order."""
+    with db.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT sr.identifier, sr.title, sr.kind, sr.part_codes, "
+                "       sr.sort_order, sr.document_id "
+                "FROM source_regulations sr "
+                "JOIN source_documents sd ON sd.id = sr.document_id "
+                "WHERE sd.slug = ? "
+                "ORDER BY sr.sort_order, sr.id",
+                (slug,),
+            )
+            rows = cur.fetchall()
+
+    for row in rows:
+        row["part_codes"] = tuple(json.loads(row["part_codes"]))
+    return rows
+
+
+def document_regulations(db: Database, document_id: int) -> tuple[Regulation, ...]:
+    """The declared regulations of *document_id*, ready to attribute parts."""
+    with db.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT identifier, title, kind, part_codes FROM source_regulations "
+                "WHERE document_id = ? ORDER BY sort_order, id",
+                (document_id,),
+            )
+            rows = cur.fetchall()
+
+    return tuple(
+        Regulation(
+            identifier=row["identifier"],
+            title=row["title"],
+            kind=row["kind"],
+            part_codes=tuple(json.loads(row["part_codes"])),
+        )
+        for row in rows
+    )
+
+
+def parts_by_regulation(db: Database, identifier: str) -> list[dict]:
+    """Every part attributed to *identifier*, with its source and size.
+
+    Answers "what does this regulation state in the corpus?" — the question a
+    citation has to survive when one document consolidates two regulations.
+    """
+    with db.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT rp.part_code, rp.annex, rp.title, rp.regulation, "
+                "       sd.slug, sd.title AS document_title, "
+                "       (SELECT COUNT(*) FROM regulation_entries re "
+                "        WHERE re.part_id = rp.id) AS entry_count "
+                "FROM regulation_parts rp "
+                "JOIN source_documents sd ON sd.id = rp.document_id "
+                "WHERE rp.regulation = ? "
+                "ORDER BY sd.slug, rp.sort_order, rp.id",
+                (identifier,),
+            )
+            return cur.fetchall()
 
 
 def record_download(
@@ -153,7 +287,31 @@ def list_documents(db: Database) -> list[dict]:
 
 
 def reference_exists(db: Database, entry_ref: str) -> bool:
+    """Whether *entry_ref* is in the corpus.
+
+    Uses the same canonical matching as ``lookup_reference``: strict ref-only
+    answering must not declare a rule out of corpus just because it was
+    stored with its heading title attached.
+    """
+    wanted = normalize_reference_text(entry_ref)
     row = db.fetch_one(
-        "SELECT 1 FROM regulation_entries WHERE entry_ref = ?", (entry_ref,)
+        "SELECT 1 FROM regulation_entries WHERE entry_ref = ?", (wanted,)
     )
-    return row is not None
+    if row is not None:
+        return True
+
+    canonical = canonical_reference(wanted)
+    if not canonical:
+        return False
+
+    with db.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT entry_ref FROM regulation_entries "
+                "WHERE entry_ref LIKE ? ESCAPE '\\'",
+                (f"{like_escape(canonical)}%",),
+            )
+            return any(
+                canonical_reference(r["entry_ref"]) == canonical
+                for r in cur.fetchall()
+            )
