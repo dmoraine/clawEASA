@@ -35,6 +35,7 @@ python -m claw_easa.cli ingest faq-all            # ingest all FAQ domains (~200
 python -m claw_easa.cli lookup ORO.FTL.110
 python -m claw_easa.cli lookup ORO.FTL.110 --json   # whole provision + provenance
 python -m claw_easa.cli refs "split duty"
+python -m claw_easa.cli refs "split duty" --json   # same results + source provenance
 python -m claw_easa.cli snippets "fatigue management"
 python -m claw_easa.cli ask "What are the operator responsibilities for FTL?"
 
@@ -65,6 +66,17 @@ claw-easa snippets "crew fatigue" --slug occurrence-reporting
 ```
 
 Run `claw-easa sources-list --type ear` to see available slugs.
+
+## Citing a `refs` result
+
+`refs --json` adds a `source` object to every result — `slug`, `url`,
+`url_kind`, `locator` and `revision` — without changing the results, their
+order, their scores or the text output. `url` is the entry's own URL when the
+source published one (`url_kind: "entry"`), otherwise the document's
+(`url_kind: "document"`), and `null` when the corpus records none. It is never
+constructed from a reference, so cite the locator and the slug when it is
+`null`. The rule text is not part of the payload; use `lookup` or `snippets`
+for the wording. See the README for the full contract.
 
 ## Source format
 

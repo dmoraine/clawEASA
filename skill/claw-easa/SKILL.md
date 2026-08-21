@@ -11,6 +11,9 @@ Preferred commands:
     EASA revision, page URL, part/subpart, regulation). Use it before quoting:
     the default output is a five-line extract.
 - `claw-easa refs "<query>"` for reference-oriented search
+  - add `--json` to get the same results as JSON, each with the source it can
+    be cited from: `url` (the entry's own URL, else the document's, else
+    `null`), `url_kind`, `locator`, `slug` and `revision`
 - `claw-easa snippets "<query>"` for cited text excerpts
 - `claw-easa hybrid "<query>"` for mixed lexical + semantic retrieval
 - `claw-easa ask "<question>"` for routed natural-language queries
@@ -44,6 +47,9 @@ Answering rules:
 - Prefer exact lookup when the user gives a regulation reference.
 - Quote the retrieved text or excerpt before paraphrasing.
 - Distinguish regulation text from AMC/GM/FAQ material.
+- Link a citation only to the `url` a result carries. When it is `null`, cite
+  the slug, the locator and the revision instead — never build a URL out of a
+  reference.
 - If retrieval is empty or ambiguous, say so explicitly instead of inferring.
 - When the question targets a specific regulation domain (e.g. occurrence
   reporting, aircrew, air operations), use `--slug` to scope the search.
