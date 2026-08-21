@@ -33,11 +33,13 @@ python -m claw_easa.cli ingest faq-all            # ingest all FAQ domains (~200
 
 # Query
 python -m claw_easa.cli lookup ORO.FTL.110
+python -m claw_easa.cli lookup ORO.FTL.110 --json   # whole provision + provenance
 python -m claw_easa.cli refs "split duty"
 python -m claw_easa.cli snippets "fatigue management"
 python -m claw_easa.cli ask "What are the operator responsibilities for FTL?"
 
 # Source-scoped search (--slug restricts to a single source document)
+python -m claw_easa.cli lookup ORO.FTL.110 --slug air-ops
 python -m claw_easa.cli refs "crew fatigue" --slug occurrence-reporting
 python -m claw_easa.cli snippets "crew fatigue" --slug occurrence-reporting
 python -m claw_easa.cli hybrid "fatigue reporting" --slug air-ops
@@ -45,14 +47,16 @@ python -m claw_easa.cli hybrid "fatigue reporting" --slug air-ops
 
 ## When to use `--slug`
 
-The `--slug` option is available on `refs`, `snippets`, and `hybrid` commands.
-Use it when:
+The `--slug` option is available on `lookup`, `refs`, `snippets`, and `hybrid`
+commands. Use it when:
 
 - The question targets a specific regulation (e.g. occurrence reporting, aircrew).
 - A broad query returns results from many sources but you need precision on one.
 - You are searching for items in long annexes or appendices — these contain
   enumerated list items that rank poorly in unscoped search because the whole
   annex body dilutes the relevance signal.
+- `lookup` reported the reference as `ambiguous` — two corpora hold it, and
+  scoping says which one to quote from.
 
 Example: to find where "crew fatigue" is listed as a reportable occurrence:
 

@@ -18,10 +18,20 @@ def _open_db() -> Database:
     return db
 
 
-def lookup(ref: str) -> list[dict]:
+def lookup(ref: str, *, slug: str | None = None) -> list[dict]:
     db = _open_db()
     try:
-        return lookup_reference(db, ref)
+        return lookup_reference(db, ref, slug=slug)
+    finally:
+        db.close()
+
+
+def lookup_detail(ref: str, *, slug: str | None = None) -> dict:
+    from claw_easa.retrieval.entry_detail import entry_detail
+
+    db = _open_db()
+    try:
+        return entry_detail(db, ref, slug=slug)
     finally:
         db.close()
 

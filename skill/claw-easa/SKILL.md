@@ -7,6 +7,9 @@ Use the local `claw-easa` CLI from this repository.
 
 Preferred commands:
 - `claw-easa lookup <REF>` for exact references such as `ORO.FTL.110`
+  - `--json` for the whole provision plus the provenance to cite it (corpus,
+    EASA revision, page URL, part/subpart, regulation). Use it before quoting:
+    the default output is a five-line extract.
 - `claw-easa refs "<query>"` for reference-oriented search
 - `claw-easa snippets "<query>"` for cited text excerpts
 - `claw-easa hybrid "<query>"` for mixed lexical + semantic retrieval
@@ -16,6 +19,7 @@ Preferred commands:
 Source-scoped search — use `--slug <source>` to restrict results to a specific
 source document. This is important when a broad query returns too many results
 from different sources, or when you know which source is most relevant:
+- `claw-easa lookup ORO.FTL.110 --slug air-ops`
 - `claw-easa refs "crew fatigue" --slug occurrence-reporting`
 - `claw-easa snippets "crew fatigue" --slug occurrence-reporting`
 - `claw-easa hybrid "fatigue reporting" --slug occurrence-reporting`
