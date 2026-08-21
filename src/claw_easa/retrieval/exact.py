@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from claw_easa.db.sqlite import Database
 from claw_easa.references import (
@@ -24,37 +25,57 @@ _ENTRY_COLUMNS = (
 )
 
 
-def lookup_reference(db: Database, ref: str) -> list[dict]:
-    """Resolve an exact regulation reference.
+def resolve_reference(
+    ref: str, run: Callable[[str, tuple], list[dict]],
+) -> list[dict]:
+    """Resolve an exact regulation reference through *run*.
 
-    Falls back to canonical matching so that entries persisted with the
-    heading title still attached — ``'M.A.201 Responsibilities'`` — answer a
-    lookup of ``M.A.201``.
+    *run* executes one WHERE fragment over ``regulation_entries`` aliased
+    ``e`` and returns the rows it selected, so each caller decides which
+    columns it needs and how the query is scoped.  What a reference *resolves
+    to* is decided here and only here: the five-line extract and the detailed
+    lookup must not disagree about which provision was asked for.
+
+    Matching is exact first, then falls back to canonical matching so that
+    entries persisted with the heading title still attached —
+    ``'M.A.201 Responsibilities'`` — answer a lookup of ``M.A.201``.  The
+    fallback re-checks every candidate against the canonical form, because the
+    LIKE prefix it searches with also matches longer references:
+    ``ORO.FTL.11`` must not be answered with ``ORO.FTL.110``.
     """
     wanted = normalize_reference_text(ref)
+    rows = run("e.entry_ref = ?", (wanted,))
+    if rows:
+        return rows
+
+    canonical = canonical_reference(wanted)
+    if not canonical:
+        return []
+
+    return [
+        row for row in run(
+            "e.entry_ref LIKE ? ESCAPE '\\'", (f"{like_escape(canonical)}%",),
+        )
+        if canonical_reference(row["entry_ref"]) == canonical
+    ]
+
+
+def lookup_reference(
+    db: Database, ref: str, *, slug: str | None = None,
+) -> list[dict]:
+    """Resolve an exact regulation reference, optionally within one corpus."""
+    scope = "AND d.slug = ? " if slug is not None else ""
+
     with db.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                _ENTRY_COLUMNS + "WHERE e.entry_ref = ? ORDER BY e.entry_type",
-                (wanted,),
-            )
-            rows = cur.fetchall()
-            if rows:
-                return rows
+            def run(where: str, params: tuple) -> list[dict]:
+                cur.execute(
+                    _ENTRY_COLUMNS + f"WHERE {where} {scope}ORDER BY e.entry_type",
+                    (*params, slug) if slug is not None else params,
+                )
+                return cur.fetchall()
 
-            canonical = canonical_reference(wanted)
-            if not canonical:
-                return []
-
-            cur.execute(
-                _ENTRY_COLUMNS
-                + "WHERE e.entry_ref LIKE ? ESCAPE '\\' ORDER BY e.entry_type",
-                (f"{like_escape(canonical)}%",),
-            )
-            return [
-                row for row in cur.fetchall()
-                if canonical_reference(row["entry_ref"]) == canonical
-            ]
+            return resolve_reference(ref, run)
 
 
 def _search_by_reference(

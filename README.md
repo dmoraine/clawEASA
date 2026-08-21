@@ -69,13 +69,36 @@ claw-easa sources-list --type faq   # only FAQs
 
 # Query
 claw-easa lookup ORO.FTL.110
+claw-easa lookup ORO.FTL.110 --json   # whole provision + provenance, as JSON
 claw-easa refs "split duty"
 claw-easa ask "What are the FTL operator responsibilities?"
 
 # Source-scoped search (restrict to a specific source)
+claw-easa lookup ORO.FTL.110 --slug air-ops
 claw-easa refs "crew fatigue" --slug occurrence-reporting
 claw-easa snippets "crew fatigue" --slug occurrence-reporting
 ```
+
+## Quoting a provision — `lookup --json`
+
+The default `lookup` output is a five-line extract for a human reader. Quoting
+a rule needs more than that, so `--json` emits one JSON document holding the
+whole provision and the provenance to cite it with — corpus slug and title,
+EASA revision, page URL, part/subpart, and the regulation stating it.
+
+The document is versioned (`schema_version`) and always carries a `status`:
+
+| `status` | meaning |
+| --- | --- |
+| `found` | `entry` holds the provision; `text` is the full body, `text_format` says whether it came from `body_markdown` or `body_text` |
+| `ambiguous` | more than one corpus holds the reference; `entry` is null and `matches` lists the candidates — re-run with `--slug` |
+| `not_found` | the corpus does not hold the reference; `entry` is null |
+
+Exit status is 0 for all three: absence and ambiguity are answers, not errors.
+
+Provenance the corpus never recorded is `null` rather than reconstructed — a
+source ingested without a page URL reports `"page_url": null` instead of one
+guessed from its slug, because a fabricated citation is worse than none.
 
 ## Downloading sources
 

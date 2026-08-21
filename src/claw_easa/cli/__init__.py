@@ -538,11 +538,26 @@ def audit_finding_history_cmd(finding_id: str) -> None:
 
 @main.command("lookup")
 @click.argument("ref")
-def lookup_cmd(ref: str) -> None:
-    """Look up an exact regulation reference."""
-    from claw_easa.retrieval.service import lookup
+@click.option("--slug", default=None, help="Restrict the lookup to a specific source slug")
+@click.option("--json", "as_json", is_flag=True,
+              help="Emit the whole entry and its provenance as one JSON document.")
+def lookup_cmd(ref: str, slug: str | None, as_json: bool) -> None:
+    """Look up an exact regulation reference.
 
-    rows = lookup(ref)
+    The default output is a five-line extract for a human reader.  --json
+    emits the whole provision with the provenance needed to cite it, and
+    reports an absent reference — or one held by several corpora — as such
+    instead of answering with one of the candidates.
+    """
+    from claw_easa.retrieval.service import lookup, lookup_detail
+
+    if as_json:
+        from claw_easa.retrieval.entry_detail import render_json
+
+        click.echo(render_json(lookup_detail(ref, slug=slug)))
+        return
+
+    rows = lookup(ref, slug=slug)
     if not rows:
         click.echo(f"No results for: {ref}")
         return
