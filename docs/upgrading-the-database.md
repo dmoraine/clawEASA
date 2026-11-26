@@ -101,9 +101,10 @@ claw-easa status
 | `lookup`, `refs`, `snippets`, `hybrid`, `ask`, `status`, `sources-list` | Work as before; ranking is identical to the old code (every FAQ is its own group). |
 | `ingest fetch`, `ingest parse` (EAR sources) | Not affected. |
 | `ingest faq`, `ingest faq-all` | **Blocked**; nothing is written. |
-| `db faq-ids plan`, `verify`, `backup` | Read-only; available. |
+| `db faq-ids plan`, `backup` | Read-only; available. |
+| `db faq-ids verify` | Available, but **not** read-only: it opens the database read-write (see section 5). Run it on a copy. |
 
-Exact error of the blocked commands (as printed, ending a Python traceback, exit code 1):
+Exact error of the blocked commands (as printed, followed by a Python traceback, exit code 1):
 
 ```
 claw_easa.db.faq_migration.MigrationError: FAQ ingestion is blocked: FAQ rows with positional refs exist but migration 005_faq_stable_ids is not applied (ingesting now would duplicate every FAQ under new ids). Run 'claw-easa db faq-ids plan --data-dir DIR' to review, then 'claw-easa db faq-ids apply --data-dir DIR --backup-to PATH'; ingestion is blocked until the migration is applied; see docs/upgrading-the-database.md.
@@ -129,7 +130,9 @@ claw_easa.db.faq_migration.MigrationError: FAQ ingestion is blocked: FAQ rows wi
 Side effect to expect: any command of the new code that opens a database read-write
 (for example `lookup`) runs `init_schema()` and creates the three **empty** tables `faq_groups`,
 `faq_entry_groups`, `faq_aliases`. They are inert and tolerated by `plan` and `apply`.
-`plan`, `verify`, `backup` and `status` open the database read-only and create nothing.
+`plan`, `backup` and `status` open the database read-only and create nothing. `verify` opens it
+read-write (so it runs `init_schema()` and, on the default data dir, asks the typed TTY
+confirmation): use it on a copy.
 
 ## 6. Rollback, and what is not reversible
 
@@ -152,8 +155,9 @@ claw-easa db faq-ids verify   --data-dir DIR --against "$BK/pre-005.db"
 
 Agents may:
 
-- run `claw-easa status` and `claw-easa db faq-ids plan --data-dir DIR` (read-only);
-- run `verify` and other read checks **on a copy** of the data;
+- run `claw-easa status` and `claw-easa db faq-ids plan --data-dir DIR` (both read-only); on a real
+  data directory these two are the **only** commands agents use;
+- run `verify` and other read checks **on a copy** of the data (`verify` is not read-only);
 - tell the operator which case (A–D) applies and which command comes next.
 
 Agents **must not**, without an explicit instruction from the operator who owns the machine:
