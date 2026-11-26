@@ -12,7 +12,9 @@ import logging
 import time
 
 from claw_easa.db import Database
+from claw_easa.db.faq_migration import ensure_ready_for_ingest, rebuild_faq_groups
 from claw_easa.db.migrations import MigrationRunner
+from claw_easa.ingest.faq_identity import StableIdCollision, assign_stable_ids, content_hash
 from claw_easa.ingest.faq_parser import parse_faq_root_page, parse_faq_page
 from claw_easa.ingest.faq_sources import REGULATIONS_FAQ_ROOT_URL, FAQDomain, make_faq_domain
 from claw_easa.ingest.repository import (
@@ -58,6 +60,7 @@ def ingest_faq_domain(domain: FAQDomain) -> dict:
 
     db = _open_db()
     try:
+        ensure_ready_for_ingest(db)
         doc_id = upsert_source_document_from_values(
             db,
             slug=domain.source_doc_slug,
@@ -109,11 +112,15 @@ def ingest_faq_domain(domain: FAQDomain) -> dict:
 
         resp = http.get(domain.url)
         faq_items = parse_faq_page(resp.text)
+        # Content-based ids: a FAQ keeps its id whatever moves around it on the page.
+        stable_ids = assign_stable_ids(
+            f"FAQ-{domain.slug}",
+            [content_hash(item.question, item.answer_text) for item in faq_items],
+        )
 
         ingested = 0
-        for item in faq_items:
+        for item, entry_ref in zip(faq_items, stable_ids):
             try:
-                entry_ref = f"FAQ-{domain.slug}-{ingested + 1:03d}"
                 entry_id = upsert_faq_entry(
                     db,
                     document_id=doc_id,
@@ -130,9 +137,12 @@ def ingest_faq_domain(domain: FAQDomain) -> dict:
                     link_faq_ref(db, entry_id, ref)
 
                 ingested += 1
+            except StableIdCollision:
+                raise
             except Exception:
                 log.warning("Failed to ingest FAQ: %s", item.question[:60], exc_info=True)
 
+        rebuild_faq_groups(db)
         return {"domain": domain.slug, "ingested": ingested}
     finally:
         db.close()
@@ -148,6 +158,13 @@ def ingest_all_faqs(*, delay: float = 1.0, progress_cb=None) -> list[dict]:
     rate-limiting.  ``progress_cb``, if provided, is called with
     ``(domain_slug, domain_count, total_domains)`` after each domain.
     """
+    # Checked once up front: the per-domain handler below would swallow it.
+    db = _open_db()
+    try:
+        ensure_ready_for_ingest(db)
+    finally:
+        db.close()
+
     domains = discover_faq_domains()
     results: list[dict] = []
 

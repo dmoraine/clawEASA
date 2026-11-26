@@ -5,6 +5,7 @@ import logging
 from collections.abc import Sequence
 
 from claw_easa.db.sqlite import Database
+from claw_easa.ingest.faq_identity import StableIdCollision, content_hash
 from claw_easa.ingest.regulations import Regulation
 from claw_easa.references import (
     canonical_reference,
@@ -217,13 +218,19 @@ def upsert_faq_entry(
     with db.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id FROM regulation_entries "
+                "SELECT id, title, body_text FROM regulation_entries "
                 "WHERE entry_ref = ? AND document_id = ? AND entry_type = 'FAQ'",
                 (entry_ref, document_id),
             )
             existing = cur.fetchone()
 
             if existing:
+                # Same stable id, different text: a hash8 collision with an
+                # older row, which must not be overwritten.
+                if content_hash(existing["title"], existing["body_text"]) != content_hash(
+                    title, body_text
+                ):
+                    raise StableIdCollision(f"{entry_ref} already holds a different FAQ text")
                 cur.execute(
                     "UPDATE regulation_entries SET "
                     "title = ?, body_text = ?, body_markdown = ?, "
