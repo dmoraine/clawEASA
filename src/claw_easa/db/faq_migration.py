@@ -280,7 +280,34 @@ def _unaliased(conn: sqlite3.Connection) -> int:
     )
 
 
+_MAPPING_CHECKS = {
+    "duplicate_alias_refs":
+        "SELECT COUNT(*) FROM (SELECT alias_ref FROM faq_aliases WHERE alias_kind = ? "
+        "GROUP BY alias_ref HAVING COUNT(*) > 1)",
+    "entries_with_several_aliases":
+        "SELECT COUNT(*) FROM (SELECT entry_id FROM faq_aliases WHERE alias_kind = ? "
+        "GROUP BY entry_id HAVING COUNT(*) > 1)",
+    "aliases_equal_to_other_entry_ref":
+        "SELECT COUNT(*) FROM faq_aliases a WHERE a.alias_kind = ? AND EXISTS "
+        "(SELECT 1 FROM regulation_entries e WHERE e.entry_ref = a.alias_ref AND e.id != a.entry_id)",
+    "aliases_on_non_faq_entries":
+        "SELECT COUNT(*) FROM faq_aliases a WHERE a.alias_kind = ? AND NOT EXISTS "
+        "(SELECT 1 FROM regulation_entries e WHERE e.id = a.entry_id AND e.entry_type = 'FAQ')",
+}
+
+
+def _check_restore_mapping(conn: sqlite3.Connection) -> None:
+    """Refuse (before any write) a legacy alias set that cannot be restored 1:1."""
+    counts = {name: _scalar(conn, sql, (LEGACY_KIND,)) for name, sql in _MAPPING_CHECKS.items()}
+    if any(counts.values()):
+        raise MigrationError(
+            "rollback refused, the legacy alias mapping is invalid: "
+            + " ".join(f"{name}={n}" for name, n in counts.items())
+        )
+
+
 def _down(conn: sqlite3.Connection, force: bool) -> None:
+    _check_restore_mapping(conn)  # not bypassed by force
     orphans = _unaliased(conn)
     if orphans and not force:
         raise MigrationError(

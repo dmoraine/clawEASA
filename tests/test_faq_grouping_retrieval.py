@@ -408,7 +408,7 @@ def test_hybrid_groups_and_keeps_rules(mig_db, fake_vector):
     faq = rows[0]
     assert faq["entry_ref"] == stable["FAQ-small-028"]
     assert [m["slug"] for m in faq["also_in"]] == ["faq-mid", "faq-big"]
-    every = hybrid_search(db, Q, top_k=100, group_faq=False)
+    every = hybrid_search(db, Q, top_k=3, group_faq=False)
     best = max(r["hybrid_score"] for r in every if r["title"] == FDP_TITLE)
     assert faq["hybrid_score"] == best  # best member, never a sum
 

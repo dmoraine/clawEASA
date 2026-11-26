@@ -167,6 +167,12 @@ Expected (rehearsal): `rolled_back: yes`, `against_immutable_match: yes`,
 the BEFORE values, `faq_groups: 0`, `faq_aliases: 0`, `ref_prefix_groups: 158`, FAISS sha256
 unchanged. The empty tables remain. A mismatch makes the command exit 1 (the rollback is already
 committed in that case: restore from the backup, see below).
+On a database where 005 is not applied, `rollback --against` prints `rolled_back: no` and a
+note that nothing was rolled back (so the comparison is no rollback verification) and exits 1;
+use `verify --against` instead. Without `--against` it prints `rolled_back: no` and exits 0.
+`rollback` (with or without `--force`) also refuses, changing nothing, when the legacy alias
+mapping is invalid (duplicate alias refs, several aliases per entry, an alias equal to another
+row's current ref, an alias on a non-FAQ row); the error prints the counts.
 
 Last resort (rollback itself failing): stop all claw-easa processes and copy
 `$BK/pre-005.db` over `$DATA/claw_easa.db` (remove `claw_easa.db-wal`/`-shm` first); the FAISS file

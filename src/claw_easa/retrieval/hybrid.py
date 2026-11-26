@@ -66,7 +66,10 @@ def hybrid_search(
         exact = _faq_ref_rows(db, query.strip(), slug)
         if exact:
             return exact[:top_k]
-    raw_k = top_k * overfetch_factor() if grouped else top_k
+    # With a slug, fetch exactly BASE's top_k: vector_search filters a 3*top_k
+    # FAISS pool by slug, so a wider fetch would change which in-slug chunks
+    # fall in the window (design §5; in-slug copies are not refilled).
+    raw_k = top_k * overfetch_factor() if grouped and not slug else top_k
 
     fts_results = search_references(db, query, limit=raw_k, slug=slug, group_faq=False)
 
@@ -78,40 +81,56 @@ def hybrid_search(
         log.warning("FAISS index not found — falling back to FTS only")
         vec_results = []
 
-    merged: dict[int, dict] = {}
+    # Window = what the plain merge sees (both lists come sorted by score), so
+    # window scores and normalisers equal the ungrouped ranking.  Rows beyond
+    # it only refill slots freed by the FAQ collapse (finding F4, design §5).
+    fts_win, vec_win = fts_results[:top_k], vec_results[:top_k]
+    max_fts = max((r.get("fts_score", 0) for r in fts_win), default=1) or 1
+    max_vec = max((r.get("vector_score", 0) for r in vec_win), default=1) or 1
 
-    if fts_results:
-        max_fts = max((r.get("fts_score", 0) for r in fts_results), default=1) or 1
-        for row in fts_results:
-            eid = row["id"]
-            norm_score = (row.get("fts_score", 0) / max_fts) * fts_weight
+    merged: dict[int, dict] = {}
+    for row in fts_win:
+        row["hybrid_score"] = (row.get("fts_score", 0) / max_fts) * fts_weight
+        row["match_source"] = "fts"
+        merged[row["id"]] = row
+
+    for row in vec_win:
+        eid = row.get("entry_id") or row.get("id")
+        norm_score = (row.get("vector_score", 0) / max_vec) * vector_weight
+        if eid in merged:
+            merged[eid]["hybrid_score"] += norm_score
+            merged[eid]["match_source"] = "hybrid"
+        else:
             row["hybrid_score"] = norm_score
-            row["match_source"] = "fts"
+            row["match_source"] = "vector"
+            row["id"] = eid
             merged[eid] = row
 
-    if vec_results:
-        max_vec = max((r.get("vector_score", 0) for r in vec_results), default=1) or 1
-        for row in vec_results:
+    # Beyond-window candidates: single best contribution, never summed.
+    extras: dict[int, dict] = {}
+    for rows, key, top, weight, source in (
+        (fts_results[top_k:], "fts_score", max_fts, fts_weight, "fts"),
+        (vec_results[top_k:], "vector_score", max_vec, vector_weight, "vector"),
+    ):
+        for row in rows:
             eid = row.get("entry_id") or row.get("id")
-            norm_score = (row.get("vector_score", 0) / max_vec) * vector_weight
-            if eid in merged:
-                merged[eid]["hybrid_score"] += norm_score
-                merged[eid]["match_source"] = "hybrid"
-            else:
-                row["hybrid_score"] = norm_score
-                row["match_source"] = "vector"
-                row["id"] = eid
-                merged[eid] = row
+            score = (row.get(key, 0) / top) * weight
+            if eid in merged or (eid in extras and extras[eid]["hybrid_score"] >= score):
+                continue
+            row["hybrid_score"], row["match_source"], row["id"] = score, source, eid
+            extras[eid] = row
 
     if not slug:
         query_words = set(_WORD_RE.findall(query.lower()))
         if query_words:
-            for row in merged.values():
+            for row in (*merged.values(), *extras.values()):
                 boost = _source_relevance_boost(query_words, row.get("slug", ""))
                 if boost > 0:
                     row["hybrid_score"] += boost
 
-    ranked = sorted(merged.values(), key=lambda r: r["hybrid_score"], reverse=True)
+    by_score = lambda r: r["hybrid_score"]  # noqa: E731
+    ranked = sorted(merged.values(), key=by_score, reverse=True)
+    ranked += sorted(extras.values(), key=by_score, reverse=True)
     if grouped:
         ranked = collapse_faq_duplicates(db, ranked, slug=slug, score_key="hybrid_score")
     return ranked[:top_k]
