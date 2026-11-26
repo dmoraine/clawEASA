@@ -1,5 +1,9 @@
 # FAQ dedup — migration runbook (`005_faq_stable_ids`)
 
+> Start with [upgrading-the-database.md](upgrading-the-database.md): it tells you which
+> situation you are in (migrate in place, nothing to do, or build from scratch) and what the
+> agents may or may not run. This runbook is the detailed procedure for the in-place case.
+
 Operator procedure to apply, verify and, if needed, roll back migration `005_faq_stable_ids` on a
 real data directory. Design: `docs/faq-dedup-design.md` (section 6). The numbers below were
 measured on a fresh copy of the 2026-11-26 snapshot (7 630 entries, 2 722 FAQ rows, 192 FAQ
@@ -37,6 +41,14 @@ tolerated by `plan` and `apply`:
 
 Always pass `--data-dir` (every `db faq-ids` command requires it, with no environment fallback).
 Other commands (`lookup`, `hybrid`, ...) must be run with `CLAW_EASA_DATA_DIR=$DATA`.
+
+### Alternative: full rebuild from scratch
+
+If you would rather discard the data directory than migrate it, build a new one (`init`,
+`ingest fetch`/`parse` per EAR source, `ingest faq-all`, `index build`): FAQ ids are stable from
+the first ingestion and 005 is recorded automatically, so none of the steps below apply. It is
+slower (network and an index build) and not required: see
+[upgrading-the-database.md](upgrading-the-database.md#2b-case-d--build-from-scratch).
 
 ## 1. Preflight
 
@@ -200,6 +212,7 @@ rollback `--against` → verify `--against` → apply again → verify `--agains
 ## 8. After the migration
 
 - Re-ingestion is guarded: `ingest` refuses to run on a database with FAQ rows but without 005.
+  The error message points to [upgrading-the-database.md](upgrading-the-database.md).
 - Old citations keep working through aliases; new citations should use the stable id
   (`FAQ-{slug}-{hash8}`), which does not change when EASA reorders its pages.
 - No FAISS rebuild is needed or wanted.

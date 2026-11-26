@@ -73,10 +73,20 @@ def status_cmd() -> None:
         click.echo("\n(database not created — run 'claw-easa init')")
         return
 
-    db = Database()
+    from claw_easa.db.faq_migration import faq_ids_state
+
+    db = Database(read_only=True)
     db.open()
     try:
         _status_corpus(db)
+        state = faq_ids_state(db)
+        if state == "migrated":
+            click.echo("FAQ ids:         migrated (005)")
+        elif state == "not_migrated":
+            click.echo(
+                "FAQ ids:         NOT migrated — run 'claw-easa db faq-ids plan --data-dir "
+                f"{settings.data_path}' (see docs/upgrading-the-database.md)"
+            )
     except Exception:
         click.echo("\n(schema not initialised)")
     finally:

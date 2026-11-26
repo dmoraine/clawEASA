@@ -2,6 +2,13 @@
 
 Query EASA Easy Access Rules — OpenClaw skill with hybrid retrieval.
 
+> **Upgrading an existing installation?** After updating the code, a database that already
+> holds FAQ rows must be migrated **once** (`005_faq_stable_ids`): until then reads work as
+> before but `ingest faq` / `ingest faq-all` are blocked. Check with `claw-easa status`
+> (last line) or `claw-easa db faq-ids plan --data-dir DIR` (read-only), then follow
+> [docs/upgrading-the-database.md](docs/upgrading-the-database.md). No re-download and no
+> FAISS rebuild are needed.
+
 ## Product goal
 
 Let users query EASA regulation and receive:
@@ -155,7 +162,11 @@ operator steps and rehearsal results: `docs/faq-dedup-migration-runbook.md`):
   answered under another ref.
 
 Before the migration all of this is a no-op: every FAQ is its own group and
-output is as before. To fill `top_k` with distinct groups, grouped searches
+output is as before, but `ingest faq` and `ingest faq-all` are blocked on a
+database that already holds FAQ rows (see
+[docs/upgrading-the-database.md](docs/upgrading-the-database.md)). On a database
+with no FAQ rows the first FAQ ingestion records the migration automatically.
+To fill `top_k` with distinct groups, grouped searches
 fetch `top_k × CLAW_EASA_FAQ_OVERFETCH_FACTOR` raw candidates (default 10).
 
 ## Downloading sources

@@ -508,6 +508,18 @@ def ensure_ready_for_ingest(db: Database) -> None:
             "005_faq_stable_ids is not applied (ingesting now would duplicate every FAQ under "
             "new ids). Run 'claw-easa db faq-ids plan --data-dir DIR' to review, then "
             "'claw-easa db faq-ids apply --data-dir DIR --backup-to PATH'; ingestion is blocked "
-            "until the migration is applied."
+            "until the migration is applied; see docs/upgrading-the-database.md."
         )
     up(db)
+
+
+def faq_ids_state(db: Database) -> str:
+    """"migrated" | "not_migrated" | "no_faq_rows", with SELECTs only."""
+    conn = _conn(db)
+    if not _scalar(conn, "SELECT COUNT(*) FROM regulation_entries WHERE entry_type = 'FAQ'"):
+        return "no_faq_rows"
+    if not conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'"
+    ).fetchone():
+        return "not_migrated"
+    return "migrated" if _applied(conn) else "not_migrated"
