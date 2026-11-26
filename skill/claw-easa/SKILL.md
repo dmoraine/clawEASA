@@ -67,6 +67,19 @@ Read these files only when needed:
 - `references/easa-answering.md` for answer format and evidence rules
 
 Local install notes:
+
+After updating the runtime (`git pull` + reinstall of the CLI):
+- Run `claw-easa status`: the last line `FAQ ids:` tells whether the database was migrated
+  (`migrated (005)`) or not (`NOT migrated — …`). Read-only alternative:
+  `claw-easa db faq-ids plan --data-dir DIR`.
+- If NOT migrated: reads (`lookup`, `refs`, `snippets`, `hybrid`, `ask`) work as before, but
+  `claw-easa ingest faq` and `ingest faq-all` are blocked until the migration is applied.
+- The migration (`claw-easa db faq-ids apply ...`) is run by the operator who owns the machine,
+  never by an agent on its own initiative; agents must not use `apply`, `rollback`, `--force`
+  or `--allow-default-data-dir` on a real data directory without that instruction.
+- Full procedure: see `docs/upgrading-the-database.md` in the claw-easa repository (the
+  installed skill folder does not include `docs/`).
+
 - The skill package lives under `skill/claw-easa/` in the repository.
 - For OpenClaw local installation, copy this folder into `~/.openclaw/workspace/skills/claw-easa/`.
 - Avoid symlinks that resolve outside the OpenClaw workspace.

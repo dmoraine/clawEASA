@@ -141,6 +141,7 @@ def test_guard_refuses_unmigrated_faq_rows(env):
     assert "claw-easa db faq-ids plan --data-dir" in msg
     assert "faq-ids apply" in msg
     assert "ingestion is blocked" in msg
+    assert "docs/upgrading-the-database.md" in msg
     assert _rows(db) == before
     assert not is_applied(db)
 

@@ -23,6 +23,23 @@ python -m claw_easa.cli --help
 python -m claw_easa.cli status
 ```
 
+## After updating the runtime
+
+After pulling a new version of the repository on a machine that already has a populated
+database, run `python -m claw_easa.cli status` and read its last line (`FAQ ids:`):
+
+- `migrated (005)` — nothing to do.
+- `NOT migrated — …` — the database holds FAQ rows from before migration `005_faq_stable_ids`.
+  Reading commands work as before; `ingest faq` and `ingest faq-all` are blocked. The operator
+  who owns the machine must run the in-place migration (no re-download, no FAISS rebuild):
+  `claw-easa db faq-ids plan --data-dir DIR` (read-only) first. Agents must not run `apply`,
+  `rollback`, `--force` or `--allow-default-data-dir` on a real data directory on their own.
+- No `FAQ ids:` line — the database has no FAQ rows; nothing to migrate.
+
+Full procedure: see `docs/upgrading-the-database.md` in the claw-easa repository (this skill
+folder is copied on its own by `scripts/install-openclaw-skill.sh`, so docs are not available
+next to it).
+
 ## First real ingestion test
 
 ```bash
