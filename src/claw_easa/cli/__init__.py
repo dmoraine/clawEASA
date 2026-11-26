@@ -181,6 +181,119 @@ def db_list_tables_cmd() -> None:
         db.close()
 
 
+@db_group.group("faq-ids")
+def faq_ids_group() -> None:
+    """Migration 005_faq_stable_ids: content-based FAQ ids (explicit, reversible)."""
+
+
+def _faq_ids_options(command):
+    command = click.option(
+        "--allow-default-data-dir", is_flag=True,
+        help="Permit operating on the default data directory.",
+    )(command)
+    return click.option(
+        "--data-dir", required=True, type=click.Path(file_okay=False, path_type=Path),
+        help="Data directory holding claw_easa.db (no environment fallback).",
+    )(command)
+
+
+def _faq_ids_db(data_dir: Path, allow_default: bool, *, read_only: bool = False) -> Database:
+    from claw_easa.config import Settings, default_data_dir
+
+    if data_dir.resolve() == default_data_dir().resolve() and not allow_default:
+        raise click.ClickException(
+            f"{data_dir} is the default data directory; pass --allow-default-data-dir to use it."
+        )
+    settings = Settings(data_dir=str(data_dir.resolve()))
+    if not settings.db_path.is_file():
+        raise click.ClickException(f"No database at {settings.db_path}")
+    return Database(settings=settings, read_only=read_only)
+
+
+def _echo_counts(counts: dict) -> None:
+    for key, value in counts.items():
+        if isinstance(value, bool):
+            value = "yes" if value else "no"
+        click.echo(f"{key}: {value}")
+
+
+@faq_ids_group.command("plan")
+@_faq_ids_options
+def faq_ids_plan_cmd(data_dir: Path, allow_default_data_dir: bool) -> None:
+    """Dry run: print aggregate counts only (opens the database read-only)."""
+    from claw_easa.db import faq_migration
+
+    db = _faq_ids_db(data_dir, allow_default_data_dir, read_only=True)
+    try:
+        report = faq_migration.plan(db)
+    finally:
+        db.close()
+    _echo_counts(report)
+    failed = faq_migration.failed_prechecks(report)
+    for name in failed:
+        click.echo(f"precheck_failed: {name}")
+    if failed:
+        raise SystemExit(1)
+
+
+@faq_ids_group.command("apply")
+@_faq_ids_options
+@click.option(
+    "--backup-to", required=True, type=click.Path(dir_okay=False, path_type=Path),
+    help="Path of the verified SQLite backup taken first (must not exist).",
+)
+def faq_ids_apply_cmd(data_dir: Path, allow_default_data_dir: bool, backup_to: Path) -> None:
+    """Back up, then apply the migration in one transaction (idempotent)."""
+    from claw_easa.db import faq_migration
+
+    if backup_to.exists():
+        raise click.ClickException(f"Backup target already exists: {backup_to}")
+    db = _faq_ids_db(data_dir, allow_default_data_dir)
+    try:
+        faq_migration.backup_database(db, backup_to)
+        MigrationRunner(db).init_schema()
+        already = not faq_migration.up(db)
+    except faq_migration.MigrationError as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        db.close()
+    _echo_counts({"backup": str(backup_to), "already_applied": already, "applied": True})
+
+
+@faq_ids_group.command("rollback")
+@_faq_ids_options
+@click.option("--force", is_flag=True,
+              help="Roll back even if FAQ rows ingested after the migration exist.")
+def faq_ids_rollback_cmd(data_dir: Path, allow_default_data_dir: bool, force: bool) -> None:
+    """Restore the positional FAQ refs recorded as legacy aliases."""
+    from claw_easa.db import faq_migration
+
+    db = _faq_ids_db(data_dir, allow_default_data_dir)
+    try:
+        rolled_back = faq_migration.down(db, force=force)
+    except faq_migration.MigrationError as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        db.close()
+    _echo_counts({"rolled_back": rolled_back})
+
+
+@faq_ids_group.command("verify")
+@_faq_ids_options
+def faq_ids_verify_cmd(data_dir: Path, allow_default_data_dir: bool) -> None:
+    """Print fingerprints and integrity checks; exit 1 when a check fails."""
+    from claw_easa.db import faq_migration
+
+    db = _faq_ids_db(data_dir, allow_default_data_dir)
+    try:
+        report = faq_migration.verify(db)
+    finally:
+        db.close()
+    _echo_counts(report)
+    if report["integrity_check"] != "ok" or report["fts_integrity"] != "ok":
+        raise SystemExit(1)
+
+
 # --- Ingest commands ---
 
 

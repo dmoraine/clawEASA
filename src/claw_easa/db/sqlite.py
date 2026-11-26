@@ -70,8 +70,9 @@ class _ConnectionProxy:
 
 
 class Database:
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(self, settings: Settings | None = None, *, read_only: bool = False) -> None:
         self.settings = settings or get_settings()
+        self.read_only = read_only
         self._conn: sqlite3.Connection | None = None
 
     @property
@@ -79,6 +80,11 @@ class Database:
         return self.settings.db_path
 
     def open(self) -> None:
+        if self.read_only:
+            # mode=ro: any write fails, and a missing file is an error, not a new DB.
+            self._conn = sqlite3.connect(f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True)
+            self._conn.row_factory = _dict_factory
+            return
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.db_path))
         self._conn.row_factory = _dict_factory

@@ -166,6 +166,35 @@ CREATE TABLE IF NOT EXISTS faq_regulation_refs (
     target_ref TEXT NOT NULL
 );
 
+-- FAQ content groups and retired refs (docs/faq-dedup-design.md, section 3).
+-- faq_groups / faq_entry_groups are derived data, rebuilt from the entries by
+-- rebuild_faq_groups(); faq_aliases is filled only by migration
+-- 005_faq_stable_ids.  The unique index uix_faq_entries_ref_doc is created by
+-- that migration, not here, so an old database with colliding FAQ refs
+-- cannot make init_schema fail.
+CREATE TABLE IF NOT EXISTS faq_groups (
+    group_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content_hash TEXT NOT NULL UNIQUE,
+    canonical_entry_id INTEGER NOT NULL
+        REFERENCES regulation_entries(id) ON DELETE CASCADE,
+    member_count INTEGER NOT NULL,
+    domain_count INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS faq_entry_groups (
+    entry_id INTEGER PRIMARY KEY REFERENCES regulation_entries(id) ON DELETE CASCADE,
+    group_id INTEGER NOT NULL REFERENCES faq_groups(group_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_faq_entry_groups_group ON faq_entry_groups(group_id);
+
+CREATE TABLE IF NOT EXISTS faq_aliases (
+    alias_ref TEXT NOT NULL,
+    entry_id INTEGER NOT NULL REFERENCES regulation_entries(id) ON DELETE CASCADE,
+    alias_kind TEXT NOT NULL DEFAULT 'legacy_positional',
+    PRIMARY KEY (alias_ref, entry_id)
+);
+
 -- FTS5 virtual table
 CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
     entry_ref,
