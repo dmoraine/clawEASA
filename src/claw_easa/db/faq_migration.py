@@ -13,6 +13,7 @@ import sqlite3
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from claw_easa.config import Settings
 from claw_easa.db.sqlite import Database
 from claw_easa.ingest.faq_identity import (
     StableIdCollision,
@@ -28,6 +29,7 @@ _PRECHECKS = (
     "stable_id_collisions", "hash8_collisions", "legacy_pattern_mismatch", "duplicate_faq_refs",
 )
 _BACKUP_TABLES = ("regulation_entries", "faq_regulation_refs", "entry_chunks")
+_FAQ_TABLES = ("faq_groups", "faq_entry_groups", "faq_aliases")
 
 
 class MigrationError(RuntimeError):
@@ -139,12 +141,22 @@ def _assess(conn: sqlite3.Connection) -> tuple[dict, list[dict], dict[int, str]]
         **{name: counts[name] for name in _PRECHECKS},
         "already_applied": applied,
     }
+    # init_schema creates these tables empty on every open, so their presence
+    # alone says nothing; rows in them before 005 would be mixed into its output.
+    present = [r["name"] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?)", _FAQ_TABLES
+    )]
+    report["faq_tables_present"] = len(present)
+    report["faq_tables_rows"] = sum(_scalar(conn, f"SELECT COUNT(*) FROM {t}") for t in present)
     report["would_apply"] = not applied and not failed_prechecks(report)
     return report, rows, new_ids
 
 
 def failed_prechecks(report: dict) -> list[str]:
-    return [name for name in _PRECHECKS if report[name]]
+    failed = [name for name in _PRECHECKS if report[name]]
+    if not report["already_applied"] and report["faq_tables_rows"]:
+        failed.append("faq_tables_not_empty")
+    return failed
 
 
 def plan(db: Database) -> dict:
@@ -216,11 +228,24 @@ def _postcheck(conn: sqlite3.Connection, expected_rows: int) -> None:
         )
 
 
+def _create_faq_tables(conn: sqlite3.Connection) -> None:
+    """CREATE IF NOT EXISTS the FAQ tables from schema.sql, inside the transaction."""
+    from claw_easa.db.migrations import SCHEMA_FILE, _table_ddl
+
+    sql_text = SCHEMA_FILE.read_text()
+    for table in _FAQ_TABLES:
+        conn.execute(f"CREATE TABLE IF NOT EXISTS {table} (\n{_table_ddl(sql_text, table)}\n)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_faq_entry_groups_group ON faq_entry_groups(group_id)"
+    )
+
+
 def _up(conn: sqlite3.Connection) -> None:
     report, rows, new_ids = _assess(conn)
     failed = failed_prechecks(report)
     if failed:
         raise MigrationError("precheck failed: " + ", ".join(failed))
+    _create_faq_tables(conn)
     for row in rows:
         old, new = row["entry_ref"], new_ids[row["id"]]
         conn.execute(
@@ -280,7 +305,13 @@ def _down(conn: sqlite3.Connection, force: bool) -> None:
 
 
 def down(db: Database, force: bool = False) -> bool:
-    """Roll 005 back in one transaction.  False when it was not applied."""
+    """Roll 005 back in one transaction.  False when it was not applied.
+
+    Restores the legacy refs and chunk prefixes, drops the unique index and
+    unrecords 005.  faq_aliases, faq_entry_groups and faq_groups are emptied
+    but kept: they are schema objects (init_schema recreates them anyway), so
+    a rolled-back database shows ``faq_tables_present: 3, faq_tables_rows: 0``.
+    """
     if not is_applied(db):
         return False
     _in_transaction(db, lambda conn: _down(conn, force))
@@ -309,8 +340,24 @@ def _fts_integrity(conn: sqlite3.Connection) -> str:
         conn.rollback()
 
 
-def verify(db: Database) -> dict:
-    """Fingerprints and integrity checks (design note, section 6)."""
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def open_read_only(path: Path) -> Database:
+    """A ``mode=ro`` Database on any SQLite file (e.g. a backup)."""
+    path = Path(path).resolve()
+    db = Database(settings=Settings(data_dir=str(path.parent), db_file=path.name), read_only=True)
+    db.open()
+    return db
+
+
+def snapshot(db: Database) -> dict:
+    """Version, row count, fingerprints and integrity_check.  Reads only."""
     conn = _conn(db)
     return {
         "applied": _applied(conn),
@@ -328,7 +375,74 @@ def verify(db: Database) -> dict:
             "ON e.id = c.entry_id WHERE e.entry_type = 'FAQ' ORDER BY c.id",
         ),
         "integrity_check": _scalar(conn, "PRAGMA integrity_check"),
-        "fts_integrity": _fts_integrity(conn),
+    }
+
+
+def _count_if_table(conn: sqlite3.Connection, table: str, sql: str) -> int:
+    """*sql* (a COUNT) or 0 when a legacy-shaped database lacks *table*."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (table,)).fetchone():
+        return 0
+    return _scalar(conn, sql)
+
+
+def verify(db: Database, ref_prefix: str | None = None) -> dict:
+    """Fingerprints, integrity checks and FAQ id counts (design note, section 6).
+
+    ``faq_entries_ungrouped``: FAQ rows without a ``faq_entry_groups`` row (all
+    of them before the migration).  ``aliases_unresolved``: ``faq_aliases`` rows
+    whose ``entry_id`` is not a FAQ row of ``regulation_entries``, i.e. the
+    legacy ref (``alias_ref``) would resolve to nothing.  With *ref_prefix*:
+    distinct FAQ rows citing a ``target_ref`` starting with it, and their
+    distinct groups (each row counts as its own group when not applied).
+    """
+    conn = _conn(db)
+    report = {**snapshot(db), "fts_integrity": _fts_integrity(conn)}
+    report["faq_groups"] = _count_if_table(conn, "faq_groups", "SELECT COUNT(*) FROM faq_groups")
+    report["faq_aliases"] = _count_if_table(
+        conn, "faq_aliases", "SELECT COUNT(*) FROM faq_aliases"
+    )
+    report["faq_entries_ungrouped"] = report["faq_rows"] - _count_if_table(
+        conn, "faq_entry_groups",
+        "SELECT COUNT(*) FROM faq_entry_groups g JOIN regulation_entries e "
+        "ON e.id = g.entry_id WHERE e.entry_type = 'FAQ'",
+    )
+    report["aliases_unresolved"] = _count_if_table(
+        conn, "faq_aliases",
+        "SELECT COUNT(*) FROM faq_aliases a WHERE NOT EXISTS (SELECT 1 FROM regulation_entries e "
+        "WHERE e.id = a.entry_id AND e.entry_type = 'FAQ')",
+    )
+    faiss = db.settings.faiss_index_path
+    report["faiss_sha256"] = file_sha256(faiss) if faiss.is_file() else "absent"
+    if ref_prefix is not None:
+        matched = (
+            "FROM faq_regulation_refs r JOIN regulation_entries e ON e.id = r.faq_entry_id "
+            "AND e.entry_type = 'FAQ' {join} WHERE substr(r.target_ref, 1, length(?)) = ?"
+        )
+        params = (ref_prefix, ref_prefix)
+        rows = _scalar(conn, "SELECT COUNT(DISTINCT r.faq_entry_id) " + matched.format(join=""),
+                       params)
+        report["ref_prefix_faq_rows"] = rows
+        report["ref_prefix_groups"] = _scalar(
+            conn,
+            "SELECT COUNT(DISTINCT g.group_id) "
+            + matched.format(join="JOIN faq_entry_groups g ON g.entry_id = e.id"),
+            params,
+        ) if report["applied"] else rows
+    return report
+
+
+def compare(current: dict, backup: dict) -> dict:
+    """Fingerprint match of *current* against a backup snapshot.
+
+    Restorable ids differ legitimately when either side is migrated: then n/a.
+    """
+    restorable = "n/a"
+    if not current["applied"] and not backup["applied"]:
+        restorable = current["restorable_fingerprint"] == backup["restorable_fingerprint"]
+    return {
+        "against_immutable_match":
+            current["immutable_fingerprint"] == backup["immutable_fingerprint"],
+        "against_restorable_match": restorable,
     }
 
 

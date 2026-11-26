@@ -132,7 +132,9 @@ listing it has always printed, including `No results for: <query>`.
 
 EASA publishes the same FAQ in several FAQ domains. Once the `005` migration
 has been applied (`claw-easa db faq-ids plan --data-dir DIR`, then
-`claw-easa db faq-ids apply --data-dir DIR --backup-to PATH`):
+`claw-easa db faq-ids apply --data-dir DIR --backup-to PATH`; also `backup`,
+`verify [--ref-prefix P] [--against BACKUP]` and `rollback [--against BACKUP]`;
+operator steps and rehearsal results: `docs/faq-dedup-migration-runbook.md`):
 
 - every FAQ has a stable id `FAQ-<slug>-<hash8>` (content-based; a repeated
   text inside one domain gets `-2`, `-3`, ...). The retired positional refs
