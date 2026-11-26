@@ -37,3 +37,6 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "snapshot: opt-in check against a migrated data-dir copy (needs CLAW_EASA_S2_SNAPSHOT_COPY)",
+]

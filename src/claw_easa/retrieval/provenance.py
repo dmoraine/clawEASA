@@ -101,6 +101,11 @@ def refs_payload(
             "title": row.get("title"),
             "score": row.get("fts_score", 0),
             "source": entry_provenance(row).to_dict(),
+            # FAQ grouping (additive): empty/null for non-FAQ and ungrouped rows.
+            "also_in": row.get("also_in", []),
+            "content_hash": row.get("content_hash"),
+            "legacy_refs": row.get("legacy_refs", []),
+            "group_size": row.get("group_size"),
         }
         for row in rows
     ]

@@ -55,6 +55,8 @@ class Settings:
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dimensions: int = 384
     easa_base_url: str = "https://www.easa.europa.eu"
+    # FAQ grouping over-fetch: raw_k = top_k * factor (docs/faq-dedup-design.md §5).
+    faq_overfetch_factor: int = 10
 
     @property
     def data_path(self) -> Path:
@@ -71,6 +73,15 @@ class Settings:
 
 
 _settings: Settings | None = None
+
+
+def _positive_int(value: object) -> int | None:
+    """*value* as an int >= 1, or None (the default applies) when it is not one."""
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 1 else None
 
 
 def get_settings() -> Settings:
@@ -95,6 +106,12 @@ def get_settings() -> Settings:
 
     if "embedding_dimensions" in yaml_cfg:
         kwargs["embedding_dimensions"] = int(yaml_cfg["embedding_dimensions"])
+
+    factor = _positive_int(
+        os.environ.get("CLAW_EASA_FAQ_OVERFETCH_FACTOR") or yaml_cfg.get("faq_overfetch_factor")
+    )
+    if factor is not None:
+        kwargs["faq_overfetch_factor"] = factor
 
     if os.environ.get("CLAW_EASA_POSTGRES_DSN"):
         import warnings

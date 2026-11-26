@@ -21,6 +21,7 @@ import json
 from claw_easa.db.sqlite import Database
 from claw_easa.references import normalize_reference_text
 from claw_easa.retrieval.exact import resolve_reference
+from claw_easa.retrieval.faq_groups import annotate_faq_rows
 
 #: Shape of the document this module emits.  Bumped when a consumer written
 #: against the previous shape would misread the current one.
@@ -34,7 +35,7 @@ SCHEMA_VERSION = "1.0"
 _OPTIONAL_ENTRY_COLUMNS = ("body_markdown", "source_locator", "source_url")
 
 _DETAIL_COLUMNS = (
-    "e.entry_ref, e.entry_type, e.title, e.body_text, "
+    "e.id, e.entry_ref, e.entry_type, e.title, e.body_text, "
     "d.slug, d.title AS document_title, d.page_url, d.revision, "
     "p.part_code, p.annex, p.regulation, sp.subpart_code"
 )
@@ -106,7 +107,8 @@ def _matching_rows(db: Database, reference: str, slug: str | None) -> list[dict]
                 )
                 return cur.fetchall()
 
-            return resolve_reference(reference, run)
+            rows = resolve_reference(reference, run)
+    return annotate_faq_rows(db, rows)
 
 
 def _optional_columns(cur) -> str:
@@ -129,6 +131,14 @@ def _match(row: dict) -> dict:
         "revision": row["revision"],
         "part": row["part_code"],
         "subpart": row["subpart_code"],
+        # FAQ grouping (additive; empty/null for non-FAQ and ungrouped rows).
+        "also_in": row.get("also_in", []),
+        "content_hash": row.get("content_hash"),
+        "group_size": row.get("group_size"),
+        "canonical_ref": row.get("canonical_ref"),
+        "is_canonical": row.get("is_canonical"),
+        "legacy_refs": row.get("legacy_refs", []),
+        "resolved_from_alias": row.get("resolved_from_alias"),
     }
 
 

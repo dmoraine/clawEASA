@@ -15,6 +15,12 @@ Preferred commands:
     be cited from: `url` (the entry's own URL, else the document's, else
     `null`), `url_kind`, `locator`, `slug` and `revision`
 - `claw-easa snippets "<query>"` for cited text excerpts
+- FAQ copies (after the `claw-easa db faq-ids apply` migration): the same FAQ
+  published in several domains is shown once, with ` [also in: slugA, slugB]`
+  in text output and `also_in`, `content_hash`, `legacy_refs`, `group_size`
+  in `refs --json` (`lookup --json` adds `canonical_ref`, `is_canonical`,
+  `resolved_from_alias`). Stable ids are `FAQ-<slug>-<hash8>`; old
+  `FAQ-<slug>-NNN` refs still resolve. See `references/usage.md`.
 - `claw-easa hybrid "<query>"` for mixed lexical + semantic retrieval
 - `claw-easa ask "<question>"` for routed natural-language queries
 - `claw-easa status` to verify corpus/index availability

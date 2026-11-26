@@ -1,10 +1,23 @@
 from __future__ import annotations
 
+from claw_easa.retrieval.faq_groups import format_also_in
 from claw_easa.retrieval.formatting import compact_snippet
 
 
 def _format_source_line(row: dict) -> str:
-    return f"- {row['entry_ref']} ({row['entry_type']}) — {row['title']} [{row['slug']}]"
+    return (
+        f"- {row['entry_ref']} ({row['entry_type']}) — {row['title']} [{row['slug']}]"
+        f"{format_also_in(row)}"
+    )
+
+
+def _alias_lines(rows: list[dict]) -> list[str]:
+    """``Resolved from alias: <ref>`` when a requested FAQ ref answered as another ref."""
+    seen = dict.fromkeys(
+        row["resolved_from_alias"] for row in rows
+        if row.get("resolved_from_alias") and row["resolved_from_alias"] != row["entry_ref"]
+    )
+    return [f"Resolved from alias: {ref}" for ref in seen]
 
 
 def _lead_from_rows(rows: list[dict], rewritten_query: str, broad: bool = False) -> str:
@@ -20,7 +33,7 @@ def _lead_from_rows(rows: list[dict], rewritten_query: str, broad: bool = False)
 
 
 def format_exact_answer(rows: list[dict], normalized_query: str, rewritten_query: str) -> str:
-    lines = [f"Exact match for: {normalized_query}", "Core sources:"]
+    lines = [f"Exact match for: {normalized_query}", *_alias_lines(rows[:3]), "Core sources:"]
     for row in rows[:3]:
         lines.append(_format_source_line(row))
         text = row.get('chunk_text') or row.get('body_text', '')
@@ -96,6 +109,7 @@ def format_answer_answer(rows: list[dict], rewritten_query: str) -> str:
             f"The most relevant interpretive source for '{rewritten_query}' is "
             f"{promoted_faqs[0]['entry_ref']} ({promoted_faqs[0]['entry_type']}) "
             f"— {promoted_faqs[0]['title']}.",
+            *_alias_lines(lead_rows[:3]),
             'Core sources:',
         ]
     else:
@@ -118,5 +132,5 @@ def format_answer_answer(rows: list[dict], rewritten_query: str) -> str:
     if remaining_faqs:
         lines.append('Related FAQs:')
         for row in remaining_faqs[:2]:
-            lines.append(f"- {row['title']} [{row['slug']}]")
+            lines.append(f"- {row['title']} [{row['slug']}]{format_also_in(row)}")
     return '\n'.join(lines)
