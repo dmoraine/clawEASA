@@ -7,7 +7,7 @@ Query EASA Easy Access Rules — OpenClaw skill with hybrid retrieval.
 > before but `ingest faq` / `ingest faq-all` are blocked. Check with `claw-easa status`
 > (last line) or `claw-easa db faq-ids plan --data-dir DIR` (read-only), then follow
 > [docs/upgrading-the-database.md](docs/upgrading-the-database.md). No re-download and no
-> FAISS rebuild are needed.
+> FAISS rebuild are needed. Agents working on this repository: read [AGENTS.md](AGENTS.md).
 
 ## Product goal
 
