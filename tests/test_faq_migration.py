@@ -1,10 +1,12 @@
 """S1 — schema tables and the explicit migration 005_faq_stable_ids."""
 
+import hashlib
 import sqlite3
 
 import pytest
 
 from claw_easa.config import Settings
+from claw_easa.db import faq_migration
 from claw_easa.db.faq_migration import (
     VERSION,
     MigrationError,
@@ -121,6 +123,8 @@ class TestPlan:
             "legacy_pattern_mismatch": 0,
             "duplicate_faq_refs": 0,
             "already_applied": False,
+            "faq_tables_present": 0,  # S3: additive plan keys (deliberate edit)
+            "faq_tables_rows": 0,
             "would_apply": True,
         }
 
@@ -386,3 +390,126 @@ class TestBackup:
         with pytest.raises(FileExistsError):
             backup_database(db, dest)
         assert dest.read_bytes() == b"keep"
+
+
+class TestVerifyOperatorFields:
+    def test_unmigrated_legacy_shaped_db(self, legacy):
+        db, _ = legacy
+        report = verify(db)
+        assert report["faq_groups"] == report["faq_aliases"] == 0
+        assert report["faq_entries_ungrouped"] == LEGACY_FAQ_COUNT
+        assert report["aliases_unresolved"] == 0
+        assert report["faiss_sha256"] == "absent"
+
+    def test_migrated_db(self, legacy):
+        db, _ = legacy
+        _migrate(db)
+        report = verify(db)
+        assert report["faq_aliases"] == LEGACY_FAQ_COUNT
+        assert report["faq_groups"] == 10
+        assert report["faq_entries_ungrouped"] == 0
+        assert report["aliases_unresolved"] == 0
+
+    def test_alias_to_a_non_faq_entry_is_unresolved(self, legacy):
+        db, _ = legacy
+        _migrate(db)
+        ir = _count(db, "SELECT id FROM regulation_entries WHERE entry_type = 'IR'")
+        db.execute(
+            "INSERT INTO faq_aliases (alias_ref, entry_id) VALUES ('FAQ-gone-001', ?)", (ir,)
+        )
+        assert verify(db)["aliases_unresolved"] == 1
+
+    def test_faiss_sha256(self, legacy, tmp_path):
+        db, _ = legacy
+        (tmp_path / "claw_easa.faiss").write_bytes(b"vectors")
+        assert verify(db)["faiss_sha256"] == hashlib.sha256(b"vectors").hexdigest()
+
+    def test_ref_prefix_counts(self, legacy):
+        db, _ = legacy
+        before = verify(db, ref_prefix="ORO.FTL")
+        assert before["ref_prefix_faq_rows"] == before["ref_prefix_groups"] == 2
+        assert "ref_prefix_faq_rows" not in verify(db)
+        _migrate(db)
+        after = verify(db, ref_prefix="ORO.FTL")
+        assert (after["ref_prefix_faq_rows"], after["ref_prefix_groups"]) == (2, 1)
+        assert verify(db, ref_prefix="CAT.")["ref_prefix_faq_rows"] == 0
+
+
+class TestFaqTablesPresence:
+    """init_schema creates the three tables empty, even before 005 is applied."""
+
+    def test_empty_tables_present_on_legacy_corpus(self, db):
+        legacy_corpus(db)
+        counts = plan(db)
+        assert (counts["faq_tables_present"], counts["faq_tables_rows"]) == (3, 0)
+        assert counts["would_apply"] is True
+        keys = list(counts)
+        assert keys.index("faq_tables_present") == keys.index("already_applied") + 1
+        assert keys.index("faq_tables_rows") == keys.index("already_applied") + 2
+        assert up(db) is True
+        assert _count(db, "SELECT COUNT(*) FROM faq_groups") == 10
+        assert _count(db, "SELECT COUNT(*) FROM faq_aliases") == LEGACY_FAQ_COUNT
+        assert _count(db, "SELECT COUNT(*) FROM faq_entry_groups") == LEGACY_FAQ_COUNT
+
+    def test_legacy_shaped_db_has_none(self, legacy):
+        db, _ = legacy
+        counts = plan(db)
+        assert (counts["faq_tables_present"], counts["faq_tables_rows"]) == (0, 0)
+
+    def test_one_table_dropped_up_recreates_it(self, db):
+        legacy_corpus(db)
+        db.execute("DROP TABLE faq_aliases")
+        counts = plan(db)
+        assert (counts["faq_tables_present"], counts["faq_tables_rows"]) == (2, 0)
+        assert counts["would_apply"] is True
+        assert up(db) is True
+        assert _count(db, "SELECT COUNT(*) FROM faq_aliases") == LEGACY_FAQ_COUNT
+        assert _count(db, "SELECT COUNT(*) FROM faq_groups") == 10
+
+    def test_non_empty_alias_table_blocks(self, db):
+        ids = legacy_corpus(db)
+        db.execute(
+            "INSERT INTO faq_aliases (alias_ref, entry_id) VALUES ('FAQ-stale-001', ?)",
+            (ids["FAQ-grand-001"],),
+        )
+        before = verify(db)
+        counts = plan(db)
+        assert counts["faq_tables_rows"] == 1
+        assert counts["would_apply"] is False
+        assert faq_migration.failed_prechecks(counts) == ["faq_tables_not_empty"]
+        with pytest.raises(MigrationError, match="faq_tables_not_empty"):
+            up(db)
+        assert not is_applied(db)
+        assert verify(db) == before
+        assert _count(db, "SELECT COUNT(*) FROM faq_aliases") == 1
+        assert _count(db, "SELECT COUNT(*) FROM faq_groups") == 0
+
+    def test_applied_db_rows_are_not_a_failure(self, db):
+        legacy_corpus(db)
+        up(db)
+        counts = plan(db)
+        assert counts["faq_tables_rows"] == 10 + 2 * LEGACY_FAQ_COUNT
+        assert faq_migration.failed_prechecks(counts) == []
+
+
+class TestSnapshot:
+    def test_snapshot_of_read_only_backup_matches_verify(self, legacy, tmp_path):
+        db, _ = legacy
+        dest = tmp_path / "backup.db"
+        backup_database(db, dest)
+        copy = faq_migration.open_read_only(dest)
+        try:
+            snap = faq_migration.snapshot(copy)
+        finally:
+            copy.close()
+        live = verify(db)
+        assert snap == {key: live[key] for key in snap}
+        assert set(snap) == {
+            "applied", "faq_rows", "immutable_fingerprint", "restorable_fingerprint",
+            "integrity_check",
+        }
+
+    def test_file_sha256(self, tmp_path):
+        path = tmp_path / "f.bin"
+        path.write_bytes(b"abc")
+        assert faq_migration.file_sha256(path) == hashlib.sha256(b"abc").hexdigest()

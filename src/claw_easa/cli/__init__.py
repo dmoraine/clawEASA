@@ -197,17 +197,58 @@ def _faq_ids_options(command):
     )(command)
 
 
+def _stdin_is_tty() -> bool:
+    import sys
+
+    return sys.stdin.isatty()
+
+
+def _confirm_default_db(db_path: Path) -> None:
+    """Typed confirmation before writing to the real (default) database."""
+    if not _stdin_is_tty():
+        raise click.ClickException(
+            f"{db_path} is the default database: confirmation must be typed on a terminal."
+        )
+    answer = click.prompt(
+        "Type the full database path to confirm", default="", show_default=False
+    )
+    if answer.strip() != str(db_path):
+        raise click.ClickException("Confirmation did not match the database path; aborted.")
+
+
 def _faq_ids_db(data_dir: Path, allow_default: bool, *, read_only: bool = False) -> Database:
     from claw_easa.config import Settings, default_data_dir
 
-    if data_dir.resolve() == default_data_dir().resolve() and not allow_default:
+    is_default = data_dir.resolve() == default_data_dir().resolve()
+    if is_default and not allow_default:
         raise click.ClickException(
             f"{data_dir} is the default data directory; pass --allow-default-data-dir to use it."
         )
     settings = Settings(data_dir=str(data_dir.resolve()))
     if not settings.db_path.is_file():
         raise click.ClickException(f"No database at {settings.db_path}")
+    if is_default and not read_only:
+        _confirm_default_db(settings.db_path.resolve())
     return Database(settings=settings, read_only=read_only)
+
+
+def _open_backup(path: Path) -> dict:
+    """Snapshot of a backup file opened read-only."""
+    from claw_easa.db import faq_migration
+
+    if not path.is_file():
+        raise click.ClickException(f"No backup at {path}")
+    backup = faq_migration.open_read_only(path)
+    try:
+        return faq_migration.snapshot(backup)
+    finally:
+        backup.close()
+
+
+_AGAINST = click.option(
+    "--against", type=click.Path(dir_okay=False, path_type=Path), default=None,
+    help="Backup file whose fingerprints must match (opened read-only).",
+)
 
 
 def _echo_counts(counts: dict) -> None:
@@ -250,6 +291,9 @@ def faq_ids_apply_cmd(data_dir: Path, allow_default_data_dir: bool, backup_to: P
         raise click.ClickException(f"Backup target already exists: {backup_to}")
     db = _faq_ids_db(data_dir, allow_default_data_dir)
     try:
+        if faq_migration.is_applied(db):
+            _echo_counts({"backup": "none", "already_applied": True, "applied": True})
+            return
         faq_migration.backup_database(db, backup_to)
         MigrationRunner(db).init_schema()
         already = not faq_migration.up(db)
@@ -260,37 +304,91 @@ def faq_ids_apply_cmd(data_dir: Path, allow_default_data_dir: bool, backup_to: P
     _echo_counts({"backup": str(backup_to), "already_applied": already, "applied": True})
 
 
+@faq_ids_group.command("backup")
+@_faq_ids_options
+@click.option(
+    "--backup-to", required=True, type=click.Path(dir_okay=False, path_type=Path),
+    help="Path of the SQLite backup (must not exist).",
+)
+def faq_ids_backup_cmd(data_dir: Path, allow_default_data_dir: bool, backup_to: Path) -> None:
+    """Online backup, then re-open it read-only and print its checks."""
+    from claw_easa.db import faq_migration
+
+    db = _faq_ids_db(data_dir, allow_default_data_dir, read_only=True)
+    try:
+        faq_migration.backup_database(db, backup_to)
+    except (FileExistsError, faq_migration.MigrationError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        db.close()
+    report = _open_backup(backup_to)
+    _echo_counts({
+        "backup": str(backup_to),
+        "backup_sha256": faq_migration.file_sha256(backup_to),
+        **report,
+    })
+    if report["integrity_check"] != "ok":
+        raise SystemExit(1)
+
+
 @faq_ids_group.command("rollback")
 @_faq_ids_options
 @click.option("--force", is_flag=True,
               help="Roll back even if FAQ rows ingested after the migration exist.")
-def faq_ids_rollback_cmd(data_dir: Path, allow_default_data_dir: bool, force: bool) -> None:
+@_AGAINST
+def faq_ids_rollback_cmd(
+    data_dir: Path, allow_default_data_dir: bool, force: bool, against: Path | None
+) -> None:
     """Restore the positional FAQ refs recorded as legacy aliases."""
     from claw_easa.db import faq_migration
 
+    backup = _open_backup(against) if against else None
     db = _faq_ids_db(data_dir, allow_default_data_dir)
     try:
         rolled_back = faq_migration.down(db, force=force)
+        current = faq_migration.snapshot(db) if backup else None
     except faq_migration.MigrationError as exc:
         raise click.ClickException(str(exc)) from exc
     finally:
         db.close()
     _echo_counts({"rolled_back": rolled_back})
+    if backup:
+        match = faq_migration.compare(current, backup)
+        _echo_counts(match)
+        if match != {"against_immutable_match": True, "against_restorable_match": True}:
+            raise click.ClickException(
+                f"The rollback has been committed, but the database does not match {against}."
+            )
 
 
 @faq_ids_group.command("verify")
 @_faq_ids_options
-def faq_ids_verify_cmd(data_dir: Path, allow_default_data_dir: bool) -> None:
+@click.option("--ref-prefix", default=None,
+              help="Count FAQ rows and groups citing a target ref with this prefix.")
+@_AGAINST
+def faq_ids_verify_cmd(
+    data_dir: Path, allow_default_data_dir: bool, ref_prefix: str | None, against: Path | None
+) -> None:
     """Print fingerprints and integrity checks; exit 1 when a check fails."""
     from claw_easa.db import faq_migration
 
+    backup = _open_backup(against) if against else None
     db = _faq_ids_db(data_dir, allow_default_data_dir)
     try:
-        report = faq_migration.verify(db)
+        report = faq_migration.verify(db, ref_prefix=ref_prefix)
     finally:
         db.close()
+    if backup:
+        report.update(faq_migration.compare(report, backup))
     _echo_counts(report)
-    if report["integrity_check"] != "ok" or report["fts_integrity"] != "ok":
+    failed = (
+        report["integrity_check"] != "ok" or report["fts_integrity"] != "ok"
+        or report["aliases_unresolved"] > 0
+        or (report["applied"] and report["faq_entries_ungrouped"] > 0)
+        or report.get("against_immutable_match") is False
+        or report.get("against_restorable_match") is False
+    )
+    if failed:
         raise SystemExit(1)
 
 
