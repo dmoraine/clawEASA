@@ -13,6 +13,7 @@ from collections.abc import Iterable, Sequence
 
 from claw_easa.config import get_settings
 from claw_easa.db.faq_aliases import resolve_faq_ref
+from claw_easa.db.faq_migration import VERSION as MIGRATION_VERSION
 from claw_easa.db.sqlite import Database
 
 _CHUNK = 500
@@ -34,6 +35,12 @@ _ENTRY_SELECT = (
     "JOIN regulation_parts p ON p.id = e.part_id "
     "JOIN regulation_subparts sp ON sp.id = e.subpart_id "
 )
+#: The keys _ENTRY_SELECT yields: the canonical's identity and provenance.
+_ENTRY_KEYS = (
+    "id", "entry_ref", "entry_type", "title", "body_text", "body_markdown", "entry_url",
+    "entry_locator", "slug", "document_url", "document_page_url", "document_revision",
+    "part_code", "subpart_code",
+)
 
 
 def overfetch_factor() -> int:
@@ -49,10 +56,12 @@ def format_also_in(row: dict) -> str:
 
 
 def grouping_active(db: Database) -> bool:
-    """True once migration 005 populated the group tables."""
+    """True once migration 005 is recorded (group rows alone do not count)."""
     try:
-        return db.fetch_one("SELECT 1 AS x FROM faq_entry_groups LIMIT 1") is not None
-    except Exception:  # a database predating the group tables
+        return db.fetch_one(
+            "SELECT 1 AS x FROM schema_migrations WHERE version = ?", (MIGRATION_VERSION,)
+        ) is not None
+    except Exception:  # a database predating schema_migrations
         return False
 
 
@@ -156,9 +165,13 @@ def annotate_faq_rows(db: Database, rows: list[dict]) -> list[dict]:
 
 
 def _display_row(best: dict, canonical: dict) -> dict:
-    """*canonical*'s identity and text with *best*'s keys and scores."""
+    """*canonical*'s identity, text and provenance with *best*'s scores.
+
+    Entry columns the canonical holds are carried even when *best*'s
+    projection lacks them (e.g. a vector row), so its provenance is never lost.
+    """
     row = dict(best)
-    row.update({k: v for k, v in canonical.items() if k in best})
+    row.update({k: v for k, v in canonical.items() if k in best or k in _ENTRY_KEYS})
     row["id"] = canonical["id"]
     if "entry_id" in best:
         row["entry_id"] = canonical["id"]

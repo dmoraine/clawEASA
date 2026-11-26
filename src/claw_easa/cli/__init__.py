@@ -352,6 +352,11 @@ def faq_ids_rollback_cmd(
     finally:
         db.close()
     _echo_counts({"rolled_back": rolled_back})
+    if backup and not rolled_back:
+        raise click.ClickException(
+            "note: migration 005 was not applied; nothing was rolled back, so the --against "
+            "comparison is not a rollback verification (use 'verify --against')."
+        )
     if backup:
         match = faq_migration.compare(current, backup)
         _echo_counts(match)

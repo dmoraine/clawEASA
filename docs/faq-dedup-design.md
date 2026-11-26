@@ -148,8 +148,9 @@ Grouping is a read-side step after ranking (D1: no FAISS rebuild, FTS is per ent
 raw_k = top_k * FAQ_OVERFETCH_FACTOR                     # default 10; setting CLAW_EASA_FAQ_OVERFETCH_FACTOR
 fts   = search_references(db, query, limit=raw_k, slug=slug)
 vec   = vector_search(db, query, top_k=raw_k, slug=slug)   # one model load, one wider FAISS search
-merged = existing merge + slug boost, unchanged             # hybrid.py:61-92
-rows   = collapse_faq_duplicates(db, sorted(merged), slug)
+merged = existing merge + boost over fts[:top_k], vec[:top_k]   # the window, see F4 below
+extras = rows beyond the window, not in merged: best single contribution + boost
+rows   = collapse_faq_duplicates(db, sorted(merged) + sorted(extras), slug)
 return rows[:top_k]
 ```
 
@@ -158,8 +159,9 @@ return rows[:top_k]
 Interactions:
 
 - **FTS + vector merge:** grouping runs after the merge, so a FAQ matched by FTS in one domain and by vector in another becomes one group with the better of the two merged scores; merge weights and normalisation (max of each raw list) are untouched. A wider fetch does not change the normaliser: the top hit of each list is the same for any `raw_k`.
+- **Over-fetch and chunk accumulation (F4).** The S0/S2 over-fetch design above did **not** neutralise F4. It ran the merge over all `raw_k` rows, and the merge adds the normalised score of every chunk of an entry. So with grouping active, entries with many mid-ranked chunks (INFO SUBJECT pages, long GM/AMC) built up inflated scores and pushed into or reordered the non-FAQ results. This also happened with `--slug` on a slug with no FAQ copies. The scoring rule is now: the **window** is the first `top_k` FTS rows and the first `top_k` vector chunks, which is exactly what the ungrouped merge with fetch size `top_k` sees. The normalisers are the window maxima. Window entries get exactly the old summed score and `match_source`, and contributions they have beyond the window are ignored. Entries found **only** beyond the window are scored by their single best normalised contribution (`max`, never summed) plus the same source boost, and they are ranked after every window entry. The extras therefore only refill slots freed by the FAQ collapse, and the order and scores of non-FAQ window entries are identical to the ungrouped ranking (`tests/test_faq_hybrid_ranking_invariance.py`). With `slug` there is no over-fetch: `vector_search` post-filters `3 × top_k` FAISS hits by slug, so a wider fetch would admit in-slug chunks the `top_k` fetch never saw into the window. FTS and vector therefore fetch exactly `top_k` (the ungrouped fetch) and the window is the whole fetch. Trade-off: slots freed by collapsing duplicate copies *within* one slug are not refilled; negligible, since copies live in different domains (only the 6 intra-domain pairs can collapse inside a slug).
 - **`top_k`:** applies to groups, after collapse. `ask` survey (`top_k=30`) and answer (`top_k=15` default via `service.hybrid`) scale `raw_k` accordingly (300 / 150).
-- **`slug` filter:** the filter is applied before grouping (as today: FTS in SQL, vector post-filter on `3 × raw_k` chunks, `vector.py:25-26`). With a slug, the displayed row is the **best member inside that slug** (the user asked for that corpus), `also_in` still lists the copies elsewhere. Within one slug only the 6 intra-domain pairs can collapse.
+- **`slug` filter:** the filter is applied before grouping (as today: FTS in SQL, vector post-filter on `3 × top_k` chunks, `vector.py:25-26`; no over-fetch with a slug, see F4). With a slug, the displayed row is the **best member inside that slug** (the user asked for that corpus), `also_in` still lists the copies elsewhere. Within one slug only the 6 intra-domain pairs can collapse.
 - **`refs` / `snippets`:** `limit × factor` raw rows → collapse → `limit`. `refs --json` additive keys per result: `also_in` (always present, `[]` for non-FAQ), `content_hash` (`null` for non-FAQ), `legacy_refs` (list of retired positional refs for that entry). `lookup --json` adds the same three keys plus `group_size`, `canonical_ref` and `is_canonical` to `entry` and to each item of `matches[]`. `schema_version` stays `"1.0"` (additive only, no existing key changes meaning).
 - **Text outputs:** one suffix ` [also in: faq-part-oro, faq-air-operations]` (slugs, canonical first omitted) via `format_also_in`; FAQ/IR/AMC/GM labels untouched (D6).
 - **Exact reference path** (`hybrid.py:43-50`) returns rows without grouping: a dotted reference does not identify FAQ copies.
