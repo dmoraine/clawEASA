@@ -18,6 +18,14 @@
 - If you only found related material, say that explicitly.
 - If nothing relevant was retrieved, say so explicitly.
 
+## Citing FAQ material
+
+- Cite the FAQ id shown (`FAQ-<slug>-<hash8>`). When `also_in` lists other
+  domains, the same FAQ is published there too: mention them if relevant,
+  do not count them as separate sources.
+- `resolved_from_alias` (or `Resolved from alias: <ref>` in `ask`) means the
+  user gave a retired `FAQ-<slug>-NNN` ref; cite the current id.
+
 ## Citing from `lookup --json`
 
 One JSON document is emitted, whatever the outcome, and `status` says which:

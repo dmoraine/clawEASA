@@ -4,6 +4,12 @@ import logging
 import re
 
 from claw_easa.db.sqlite import Database
+from claw_easa.retrieval.exact import _search_by_faq_ref
+from claw_easa.retrieval.faq_groups import (
+    collapse_faq_duplicates,
+    grouping_active,
+    overfetch_factor,
+)
 from claw_easa.retrieval.fts_compat import to_fts5_query
 
 log = logging.getLogger(__name__)
@@ -38,6 +44,16 @@ _SUBREF_DETECT_RE = re.compile(
 def search_snippets(
     db: Database, query: str, limit: int = 10, *, slug: str | None = None,
 ) -> list[dict]:
+    """Snippet search; once migration 005 ran, FAQ copies collapse per group."""
+    grouped = grouping_active(db)
+    if grouped:
+        exact = _search_by_faq_ref(db, query, limit, slug)
+        if exact:
+            return _enrich_with_chunks(db, exact, query)
+    final_limit = limit
+    if grouped:
+        limit *= overfetch_factor()
+
     fts = to_fts5_query(query)
     slug_clause = "AND d.slug = ? " if slug else ""
 
@@ -73,7 +89,10 @@ def search_snippets(
                 cur.execute(sql, params)
                 results = cur.fetchall()
 
-    return _enrich_with_chunks(db, results, query)
+    results = _enrich_with_chunks(db, results, query)
+    if grouped:
+        results = collapse_faq_duplicates(db, results, slug=slug, score_key="fts_score")
+    return results[:final_limit]
 
 
 def _enrich_with_chunks(

@@ -283,7 +283,9 @@ def test_refs_json_is_valid_and_carries_every_result_with_its_provenance(cli):
     assert payload["query"] == "operator responsibilities"
     assert payload["count"] == len(payload["results"]) >= 1
     for result in payload["results"]:
-        assert set(result) == {"entry_ref", "entry_type", "title", "score", "source"}
+        assert set(result) == {"entry_ref", "entry_type", "title", "score", "source",
+                               # S2 additive FAQ-grouping keys
+                               "also_in", "content_hash", "legacy_refs", "group_size"}
         assert isinstance(result["score"], (int, float))
         assert set(result["source"]) == {"slug", "url", "url_kind", "locator", "revision"}
 

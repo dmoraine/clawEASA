@@ -10,6 +10,13 @@ from claw_easa.references import (
     like_escape,
     normalize_reference_text,
 )
+from claw_easa.retrieval.faq_groups import (
+    annotate_faq_rows,
+    collapse_faq_duplicates,
+    faq_rows_for_ref,
+    grouping_active,
+    overfetch_factor,
+)
 from claw_easa.retrieval.fts_compat import to_fts5_query
 
 log = logging.getLogger(__name__)
@@ -55,10 +62,20 @@ def resolve_reference(
     fallback re-checks every candidate against the canonical form, because the
     LIKE prefix it searches with also matches longer references:
     ``ORO.FTL.11`` must not be answered with ``ORO.FTL.110``.
+
+    Between the two, a retired FAQ ref (``faq_aliases``, migration 005)
+    answers with the entry that carried it; such rows are marked
+    ``resolved_from_alias`` with the requested ref.
     """
     wanted = normalize_reference_text(ref)
     rows = run("e.entry_ref = ?", (wanted,))
     if rows:
+        return rows
+
+    rows = run("e.id IN (SELECT entry_id FROM faq_aliases WHERE alias_ref = ?)", (wanted,))
+    if rows:
+        for row in rows:
+            row["resolved_from_alias"] = wanted
         return rows
 
     canonical = canonical_reference(wanted)
@@ -88,7 +105,8 @@ def lookup_reference(
                 )
                 return cur.fetchall()
 
-            return resolve_reference(ref, run)
+            rows = resolve_reference(ref, run)
+    return annotate_faq_rows(db, rows)
 
 
 def _search_by_reference(
@@ -119,11 +137,34 @@ def _search_by_reference(
             return cur.fetchall()
 
 
+def _search_by_faq_ref(db: Database, query: str, limit: int, slug: str | None) -> list[dict]:
+    """A current FAQ ref or a retired alias answers with that entry (score 1.0)."""
+    rows = faq_rows_for_ref(db, query, slug=slug)[:limit]
+    for row in rows:
+        row.pop("body_markdown", None)
+        row["fts_score"] = 1.0
+    return annotate_faq_rows(db, rows)
+
+
 def search_references(
     db: Database, query: str, limit: int = 20, *, slug: str | None = None,
+    group_faq: bool = True,
 ) -> list[dict]:
+    """Reference search; FAQ copies collapse to one row per content group.
+
+    Grouping (and the FAQ-ref pre-step) only applies once migration 005
+    populated the group tables; *group_faq* False returns raw rows, as
+    ``hybrid_search`` needs before its own merge.
+    """
     if is_reference_query(query):
         return _search_by_reference(db, query, limit, slug)
+
+    grouped = group_faq and grouping_active(db)
+    if grouped:
+        exact = _search_by_faq_ref(db, query, limit, slug)
+        if exact:
+            return exact
+    final_limit, limit = limit, limit * overfetch_factor() if grouped else limit
 
     fts = to_fts5_query(query)
     results: list[dict] = []
@@ -168,4 +209,6 @@ def search_references(
                 cur.execute(like_sql, params)
                 results = cur.fetchall()
 
-    return results
+    if grouped:
+        results = collapse_faq_duplicates(db, results, slug=slug, score_key="fts_score")
+    return results[:final_limit]

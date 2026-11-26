@@ -128,6 +128,34 @@ claw-easa refs "crew fatigue" --slug occurrence-reporting --limit 3 --json
 Nothing else about `refs` changes — without `--json` the output is the text
 listing it has always printed, including `No results for: <query>`.
 
+## FAQ copies and stable FAQ ids
+
+EASA publishes the same FAQ in several FAQ domains. Once the `005` migration
+has been applied (`claw-easa db faq-ids plan --data-dir DIR`, then
+`claw-easa db faq-ids apply --data-dir DIR --backup-to PATH`):
+
+- every FAQ has a stable id `FAQ-<slug>-<hash8>` (content-based; a repeated
+  text inside one domain gets `-2`, `-3`, ...). The retired positional refs
+  `FAQ-<slug>-NNN` still resolve, as aliases, in `lookup`, `lookup --json`,
+  `refs`, `snippets`, `hybrid` and `ask`;
+- `refs`, `snippets`, `hybrid` and `ask` show each FAQ text **once**: the
+  copy from the domain with the fewest FAQs (with `--slug`, the copy in that
+  slug), followed in text output by ` [also in: slugA, slugB]`. `lookup`
+  returns the copy that was asked for, with the same suffix. Nothing is
+  deleted: every copy keeps its own row and id;
+- `refs --json` results carry `also_in` (list of `{entry_ref, slug}` of the
+  other copies), `content_hash`, `legacy_refs` and `group_size`;
+  `lookup --json` `entry` and `matches[]` carry those plus `canonical_ref`,
+  `is_canonical` and `resolved_from_alias` (the requested ref when it matched
+  a retired alias). For non-FAQ entries they are `[]`/`null`; existing keys
+  are unchanged and `schema_version` stays `"1.0"`;
+- `ask` prints `Resolved from alias: <ref>` when the requested FAQ ref is
+  answered under another ref.
+
+Before the migration all of this is a no-op: every FAQ is its own group and
+output is as before. To fill `top_k` with distinct groups, grouped searches
+fetch `top_k × CLAW_EASA_FAQ_OVERFETCH_FACTOR` raw candidates (default 10).
+
 ## Downloading sources
 
 The normal HTTP fetch currently works without browser automation. It discovers
@@ -195,6 +223,9 @@ Key environment variables:
 - `CLAW_EASA_DATA_DIR` — data directory (default: `~/.local/share/claw-easa`)
 - `CLAW_EASA_DB_FILE` — SQLite filename (default: `claw_easa.db`)
 - `CLAW_EASA_EMBEDDING_MODEL` — embedding model (default: `BAAI/bge-small-en-v1.5`)
+- `CLAW_EASA_FAQ_OVERFETCH_FACTOR` — raw candidates per result when FAQ
+  copies are grouped (`faq_overfetch_factor` in `config.yaml`; integer ≥ 1,
+  default 10; an invalid value falls back to 10)
 
 The default data directory is anchored to your home directory, so the SQLite
 database and FAISS index resolve to the same place whether the CLI runs from

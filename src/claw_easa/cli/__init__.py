@@ -662,6 +662,7 @@ def lookup_cmd(ref: str, slug: str | None, as_json: bool) -> None:
     reports an absent reference — or one held by several corpora — as such
     instead of answering with one of the candidates.
     """
+    from claw_easa.retrieval.faq_groups import format_also_in
     from claw_easa.retrieval.service import lookup, lookup_detail
 
     if as_json:
@@ -677,7 +678,7 @@ def lookup_cmd(ref: str, slug: str | None, as_json: bool) -> None:
     for row in rows:
         click.echo(
             f"\n{row['entry_ref']} ({row['entry_type']}) "
-            f"— {row['title']} [{row['slug']}]"
+            f"— {row['title']} [{row['slug']}]{format_also_in(row)}"
         )
         body = row.get("body_text", "")
         if body:
@@ -696,6 +697,7 @@ def lookup_cmd(ref: str, slug: str | None, as_json: bool) -> None:
               help="Emit the same results as JSON, with source provenance")
 def refs_cmd(query: str, limit: int, slug: str | None, as_json: bool) -> None:
     """Search regulation references."""
+    from claw_easa.retrieval.faq_groups import format_also_in
     from claw_easa.retrieval.service import refs
 
     rows = refs(query, limit=limit, slug=slug)
@@ -717,7 +719,7 @@ def refs_cmd(query: str, limit: int, slug: str | None, as_json: bool) -> None:
         score = row.get("fts_score", 0)
         click.echo(
             f"  {row['entry_ref']} ({row['entry_type']}) "
-            f"— {row['title']} [score={score:.2f}]"
+            f"— {row['title']} [score={score:.2f}]{format_also_in(row)}"
         )
 
 
@@ -727,6 +729,7 @@ def refs_cmd(query: str, limit: int, slug: str | None, as_json: bool) -> None:
 @click.option("--slug", default=None, help="Restrict search to a specific source slug")
 def snippets_cmd(query: str, limit: int, slug: str | None) -> None:
     """Search and show text snippets."""
+    from claw_easa.retrieval.faq_groups import format_also_in
     from claw_easa.retrieval.service import snippets
     from claw_easa.retrieval.formatting import compact_snippet
 
@@ -735,7 +738,9 @@ def snippets_cmd(query: str, limit: int, slug: str | None) -> None:
         click.echo(f"No results for: {query}")
         return
     for row in rows:
-        click.echo(f"\n{row['entry_ref']} ({row['entry_type']}) — {row['title']}")
+        click.echo(
+            f"\n{row['entry_ref']} ({row['entry_type']}) — {row['title']}{format_also_in(row)}"
+        )
         subref = row.get("matched_subref")
         if subref:
             click.echo(f"  [matched inside: {subref}]")
@@ -751,6 +756,7 @@ def snippets_cmd(query: str, limit: int, slug: str | None) -> None:
 @click.option("--slug", default=None, help="Restrict search to a specific source slug")
 def hybrid_cmd(query: str, top_k: int, slug: str | None) -> None:
     """Hybrid search (FTS + vector)."""
+    from claw_easa.retrieval.faq_groups import format_also_in
     from claw_easa.retrieval.service import hybrid
 
     rows = hybrid(query, top_k=top_k, slug=slug)
@@ -762,7 +768,7 @@ def hybrid_cmd(query: str, top_k: int, slug: str | None) -> None:
         source = row.get("match_source", "?")
         click.echo(
             f"  {row.get('entry_ref', '?')} ({row.get('entry_type', '?')}) "
-            f"— {row.get('title', '?')} [score={score:.3f}, via={source}]"
+            f"— {row.get('title', '?')} [score={score:.3f}, via={source}]{format_also_in(row)}"
         )
 
 

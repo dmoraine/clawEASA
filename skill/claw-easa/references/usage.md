@@ -78,6 +78,24 @@ constructed from a reference, so cite the locator and the slug when it is
 `null`. The rule text is not part of the payload; use `lookup` or `snippets`
 for the wording. See the README for the full contract.
 
+## FAQ copies and stable ids
+
+After migration `005` (`claw-easa db faq-ids plan|apply --data-dir DIR`;
+before it nothing below applies and output is unchanged):
+
+- FAQ ids are `FAQ-<slug>-<hash8>`; old positional `FAQ-<slug>-NNN` refs
+  resolve as aliases in `lookup`, `lookup --json`, `refs`, `snippets`,
+  `hybrid` and `ask`.
+- `refs`, `snippets`, `hybrid` and `ask` show one row per FAQ text (the copy
+  from the smallest FAQ domain, or the in-slug copy with `--slug`), with the
+  text suffix ` [also in: slugA, slugB]`. `lookup` returns the copy asked for.
+- `refs --json` per result: `also_in` (`[{entry_ref, slug}]`), `content_hash`,
+  `legacy_refs`, `group_size` (`[]`/`null` for non-FAQ). `lookup --json`
+  `entry`/`matches[]` add `canonical_ref`, `is_canonical`,
+  `resolved_from_alias`. Existing keys are unchanged.
+- `CLAW_EASA_FAQ_OVERFETCH_FACTOR` (default 10): raw candidates per result
+  fetched before grouping.
+
 ## Source format
 
 EASA distributes Easy Access Rules as ZIP archives containing a flat Office Open XML file.
